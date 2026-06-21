@@ -118,26 +118,27 @@ function initBasicsTabs() {
 // 4. 12導程黏貼練習
 // ═══════════════════════════════════════════════
 // 正確電極位置（以圖片寬/高百分比表示，以 CPR 安妮正面圖為基準）
+// 病人右側在螢幕左邊，病人左側在螢幕右邊
 const CORRECT_POSITIONS = {
-  RA: { x: 0.74, y: 0.23 },  // 右鎖骨下方
-  LA: { x: 0.26, y: 0.23 },  // 左鎖骨下方
-  RL: { x: 0.68, y: 0.70 },  // 右下腹
-  LL: { x: 0.32, y: 0.70 },  // 左下腹
-  V1: { x: 0.55, y: 0.38 },  // 胸骨右緣第4肋
-  V2: { x: 0.46, y: 0.38 },  // 胸骨左緣第4肋
-  V3: { x: 0.40, y: 0.43 },  // V2–V4 中點
-  V4: { x: 0.35, y: 0.48 },  // 左鎖骨中線第5肋
-  V5: { x: 0.28, y: 0.48 },  // 前腋線
-  V6: { x: 0.21, y: 0.48 },  // 腋中線
+  RA: { x: 0.28, y: 0.23 },  // 右鎖骨下方 (螢幕左)
+  LA: { x: 0.72, y: 0.23 },  // 左鎖骨下方 (螢幕右)
+  RL: { x: 0.32, y: 0.70 },  // 右下腹 (螢幕左)
+  LL: { x: 0.68, y: 0.70 },  // 左下腹 (螢幕右)
+  V1: { x: 0.46, y: 0.38 },  // 胸骨右緣第4肋 (螢幕左)
+  V2: { x: 0.54, y: 0.38 },  // 胸骨左緣第4肋 (螢幕右)
+  V3: { x: 0.59, y: 0.43 },  // V2–V4 中點 (螢幕右)
+  V4: { x: 0.64, y: 0.48 },  // 左鎖骨中線第5肋 (螢幕右)
+  V5: { x: 0.69, y: 0.48 },  // 前腋線 (螢幕右)
+  V6: { x: 0.74, y: 0.48 },  // 腋中線 (螢幕右)
 };
 
-// 初始散佈位置（練習起始，讓學員拖曳）
+// 初始散佈位置（將導極按螢幕左右側排列，方便拖曳不交錯）
 const INIT_POSITIONS = {
-  RA: { x: 0.85, y: 0.10 }, LA: { x: 0.15, y: 0.10 },
-  RL: { x: 0.85, y: 0.85 }, LL: { x: 0.15, y: 0.85 },
-  V1: { x: 0.80, y: 0.30 }, V2: { x: 0.80, y: 0.40 },
-  V3: { x: 0.80, y: 0.50 }, V4: { x: 0.80, y: 0.60 },
-  V5: { x: 0.20, y: 0.75 }, V6: { x: 0.10, y: 0.75 },
+  RA: { x: 0.15, y: 0.10 }, LA: { x: 0.85, y: 0.10 },
+  RL: { x: 0.15, y: 0.85 }, LL: { x: 0.85, y: 0.85 },
+  V1: { x: 0.15, y: 0.30 }, V2: { x: 0.85, y: 0.30 },
+  V3: { x: 0.85, y: 0.40 }, V4: { x: 0.85, y: 0.50 },
+  V5: { x: 0.85, y: 0.60 }, V6: { x: 0.85, y: 0.70 },
 };
 
 const LIMB_LEADS  = ['RA','LA','RL','LL'];
@@ -661,14 +662,6 @@ const RHYTHM_DEFS = {
     name: '正常竇性心律（Normal Sinus Rhythm）',
     rate: 75,
     color: '#00FF88',
-    // P-Q-R-S-T 標準波形
-    segments: [
-      [0.00,0],[0.05,0],[0.07,0.15],[0.09,0.10],[0.11,0],  // P 波
-      [0.13,0],[0.15,-0.08],                                 // PR 段
-      [0.16,-0.25],[0.18,1.0],[0.20,-0.35],[0.22,0],        // QRS
-      [0.27,0],[0.30,0.18],[0.38,0.22],[0.46,0],            // ST + T
-      [0.55,0],[1.00,0]
-    ],
     info: {
       title: '🟢 正常竇性心律',
       criteria: ['心率 60–100 次/分，節律規則','每個 QRS 前有 P 波，形態一致','PR 間期 0.12–0.20 秒（3–5 小格）','QRS 寬度 ≤ 0.12 秒（3 小格以內）','ST 段貼近基線，T 波直立（aVR 除外）'],
@@ -679,13 +672,6 @@ const RHYTHM_DEFS = {
     name: '上心室頻脈（SVT）',
     rate: 170,
     color: '#FFD166',
-    // P 波可能埋入 T 波，QRS 窄，節律極規則
-    segments: [
-      [0.00,0],[0.03,0.08],[0.05,0],      // 小 P 波（可能不清晰）
-      [0.06,-0.10],[0.07,0.85],[0.09,-0.22],[0.11,0], // QRS
-      [0.14,0],[0.18,0.12],[0.24,0],      // T 波
-      [0.30,0],[1.00,0]
-    ],
     info: {
       title: '🟡 上心室頻脈（SVT）',
       criteria: ['心率 150–250 次/分，節律極規則','P 波常埋入 T 波或不可見','QRS 窄（≤ 0.12 秒）','突發突止為典型特徵','最常見：AVNRT（房室結折返性頻脈）'],
@@ -694,10 +680,8 @@ const RHYTHM_DEFS = {
   },
   af: {
     name: '心房顫動（Atrial Fibrillation）',
-    rate: 90,
+    rate: 110,
     color: '#06B6D4',
-    // 無 P 波，R-R 絕對不規則，有 f 波基線
-    segments: null, // 特殊：由 drawAF 函式生成
     info: {
       title: '🔵 心房顫動（AF）',
       criteria: ['P 波消失，代之以不規則細小 f 波（350–600 次/分）','R-R 間距完全不規則（絕對不整脈）','QRS 通常正常寬度（≤ 0.12 秒）','心室率視房室結傳導而異（通常 60–150 次/分）','慢性 AF 可能合併心衰竭、腦梗塞風險'],
@@ -708,12 +692,6 @@ const RHYTHM_DEFS = {
     name: '心室頻脈（Ventricular Tachycardia）',
     rate: 160,
     color: '#FF4E6A',
-    // 寬 QRS，異常形態，無正常 P 波
-    segments: [
-      [0.00,0],[0.02,-0.12],[0.06,0.90],[0.10,-0.45],[0.16,-0.20],[0.22,0], // 寬怪 QRS
-      [0.27,0.10],[0.38,-0.12],[0.45,0], // 異常 ST-T
-      [0.55,0],[1.00,0]
-    ],
     info: {
       title: '🔴 心室頻脈（VT）',
       criteria: ['心率 100–250 次/分（多為 150–200 bpm）','QRS 寬且怪異（≥ 0.12 秒），形態異常','通常無正常 P 波，或 P 波與 QRS 無關（房室分離）','節律多半規則','可能伴隨或退化為心室顫動（VF）'],
@@ -724,7 +702,6 @@ const RHYTHM_DEFS = {
     name: '心室顫動（Ventricular Fibrillation）',
     rate: 0,
     color: '#FF4E6A',
-    segments: null, // 特殊：由 drawVF 函式生成
     info: {
       title: '⚫ 心室顫動（VF）',
       criteria: ['完全混亂、不規則、無法辨識的波形','無 P 波、無 QRS、無 T 波','振幅高低不一（粗 VF vs. 細 VF）','心臟無有效排血 → 無脈搏 → 心跳停止'],
@@ -735,14 +712,6 @@ const RHYTHM_DEFS = {
     name: '竇性心搏過緩（Sinus Bradycardia）',
     rate: 40,
     color: '#7CD4FD',
-    // 標準 PQRST 但心率慢
-    segments: [
-      [0.00,0],[0.04,0],[0.06,0.15],[0.08,0.10],[0.10,0],
-      [0.12,0],[0.14,-0.08],
-      [0.15,-0.25],[0.17,1.0],[0.19,-0.35],[0.21,0],
-      [0.26,0],[0.30,0.18],[0.38,0.22],[0.46,0],
-      [0.55,0],[1.00,0]
-    ],
     info: {
       title: '🩵 竇性心搏過緩（Sinus Bradycardia）',
       criteria: ['心率 < 60 次/分','P 波正常，每個 QRS 前均有 P 波','PR 間期、QRS 寬度均正常','TP 段延長（兩次心跳間距變長）'],
@@ -753,8 +722,6 @@ const RHYTHM_DEFS = {
     name: '三度房室傳導阻滯（Complete AV Block）',
     rate: 35,
     color: '#FB923C',
-    // P 波與 QRS 完全無關（房室分離），心室自搏
-    segments: null, // 特殊：由 drawAVB3 函式生成
     info: {
       title: '🟠 三度房室傳導阻滯（Complete AV Block）',
       criteria: ['P 波規則出現（心房率 60–100 次/分）','QRS 完全與 P 波無關（房室分離）','心室靠逸搏節律維持（30–45 bpm），QRS 可能寬','P 波可能落在 QRS 前、中、後，PR 間期不固定','為最嚴重的房室傳導阻滯'],
@@ -763,16 +730,8 @@ const RHYTHM_DEFS = {
   },
   pea: {
     name: '無脈性電氣活動（PEA）',
-    rate: 60,
+    rate: 55,
     color: '#A78BFA',
-    // 有 QRS 波形但患者無脈搏 — 外觀可能類似正常
-    segments: [
-      [0.00,0],[0.05,0],[0.07,0.12],[0.09,0],
-      [0.11,0],[0.13,-0.05],
-      [0.14,-0.20],[0.16,0.75],[0.18,-0.25],[0.20,0],
-      [0.25,0],[0.28,0.15],[0.36,0.18],[0.44,0],
-      [0.55,0],[1.00,0]
-    ],
     info: {
       title: '🔵 無脈性電氣活動（PEA）',
       criteria: ['心電圖可見任何有組織的心律（常見竇性或寬QRS）','但臨床上：觸摸不到脈搏','屬心跳停止的一型，需立即 CPR','常見可逆原因（4H4T）：低血容、低血氧、張力性氣胸、心包填塞…'],
@@ -834,156 +793,241 @@ function initPractice() {
   resizeCanvas();
   window.addEventListener('resize', () => { resizeCanvas(); });
 
-  // ─── 波形繪製工具 ───────────────────────────────
-  function interpolateWaveform(segs, t) {
-    for (let i = 0; i < segs.length - 1; i++) {
-      const [t0, a0] = segs[i];
-      const [t1, a1] = segs[i + 1];
-      if (t >= t0 && t <= t1) {
-        const r = (t - t0) / (t1 - t0 || 1);
-        return a0 + (a1 - a0) * r;
+  // ─── 數學化平滑心電圖波形生成器 ───────────────────
+  function getNormalBeat(t) {
+    let val = 0;
+    // P 波 (平滑半正弦波)
+    if (t >= 0.06 && t <= 0.12) {
+      val += 0.12 * Math.sin(Math.PI * (t - 0.06) / 0.06);
+    }
+    // QRS 複合波
+    // Q 波 (下陷)
+    if (t >= 0.14 && t <= 0.15) {
+      val -= 0.06 * Math.sin(Math.PI * (t - 0.14) / 0.01);
+    }
+    // R 波 (高尖峰)
+    else if (t > 0.15 && t <= 0.17) {
+      if (t <= 0.16) {
+        val += (t - 0.15) / 0.01;
+      } else {
+        val += (0.17 - t) / 0.01;
       }
+    }
+    // S 波 (深下陷)
+    else if (t > 0.17 && t <= 0.185) {
+      if (t <= 0.177) {
+        val -= 0.15 * (t - 0.17) / 0.007;
+      } else {
+        val -= 0.15 * (0.185 - t) / 0.008;
+      }
+    }
+    // T 波 (平滑寬正弦波)
+    if (t >= 0.24 && t <= 0.40) {
+      val += 0.22 * Math.sin(Math.PI * (t - 0.24) / 0.16);
+    }
+    return val;
+  }
+
+  function getNormalBeatNoP(t) {
+    let val = 0;
+    // QRS
+    if (t >= 0.05 && t <= 0.10) {
+      val -= 0.06 * Math.sin(Math.PI * (t - 0.05) / 0.05);
+    }
+    else if (t > 0.10 && t <= 0.20) {
+      if (t <= 0.15) {
+        val += 0.85 * (t - 0.10) / 0.05;
+      } else {
+        val += 0.85 * (0.20 - t) / 0.05;
+      }
+    }
+    else if (t > 0.20 && t <= 0.28) {
+      if (t <= 0.24) {
+        val -= 0.15 * (t - 0.20) / 0.04;
+      } else {
+        val -= 0.15 * (0.28 - t) / 0.04;
+      }
+    }
+    // T 波
+    if (t >= 0.40 && t <= 0.90) {
+      val += 0.22 * Math.sin(Math.PI * (t - 0.40) / 0.50);
+    }
+    return val;
+  }
+
+  function getWideQRS(t) {
+    let val = 0;
+    // 寬 QRS (0.0 到 0.22) - 寬而有切跡 (slurred notch)
+    if (t >= 0.0 && t <= 0.22) {
+      val += 0.8 * Math.sin(Math.PI * t / 0.22);
+      val += 0.15 * Math.sin(3 * Math.PI * t / 0.22);
+    }
+    // 相反方向的 discordant T 波 (0.22 到 0.80)
+    if (t > 0.22 && t <= 0.80) {
+      val -= 0.26 * Math.sin(Math.PI * (t - 0.22) / 0.58);
+    }
+    return val;
+  }
+
+  function getSinusBeat(x_abs, cyclePx, activePx) {
+    const x_mod = ((x_abs % cyclePx) + cyclePx) % cyclePx;
+    if (x_mod < activePx) {
+      return getNormalBeat(x_mod / activePx);
     }
     return 0;
   }
 
-  function drawStandardWave(def) {
+  function getSVTBeat(x_abs, cyclePx) {
+    const x_mod = ((x_abs % cyclePx) + cyclePx) % cyclePx;
+    const t = x_mod / cyclePx;
+    let val = 0;
+    // QRS (窄，佔14%週期)
+    if (t >= 0.00 && t <= 0.03) {
+      val -= 0.06 * Math.sin(Math.PI * t / 0.03);
+    }
+    else if (t > 0.03 && t <= 0.09) {
+      if (t <= 0.06) {
+        val += 0.85 * (t - 0.03) / 0.03;
+      } else {
+        val += 0.85 * (0.09 - t) / 0.03;
+      }
+    }
+    else if (t > 0.09 && t <= 0.14) {
+      if (t <= 0.11) {
+        val -= 0.15 * (t - 0.09) / 0.02;
+      } else {
+        val -= 0.15 * (0.14 - t) / 0.03;
+      }
+    }
+    // T 波 (寬且與下一個 QRS 連續)
+    if (t >= 0.14 && t <= 0.90) {
+      val += 0.28 * Math.sin(Math.PI * (t - 0.14) / 0.76);
+    }
+    return val;
+  }
+
+  function getAFValue(x_abs, W) {
+    const baseCycle = W * 60 / 110 / 2.5;
+    const rrFractions = [1.1, 0.85, 1.2, 0.75, 1.0, 1.3, 0.8, 1.15, 0.95, 1.25];
+    let beatPositions = [];
+    let acc = 0;
+    for (let f of rrFractions) {
+      acc += f * baseCycle;
+      beatPositions.push(acc);
+    }
+    const totalPeriod = acc;
+    const x_mod = ((x_abs % totalPeriod) + totalPeriod) % totalPeriod;
+    
+    let beatVal = 0;
+    const activePx = W * 60 / 75 / 2.5; // 正常 QRS-T 的寬度
+    
+    for (let i = 0; i < beatPositions.length; i++) {
+      const bp = beatPositions[i];
+      let diff = x_mod - bp;
+      if (diff < -totalPeriod / 2) diff += totalPeriod;
+      if (diff > totalPeriod / 2) diff -= totalPeriod;
+      
+      if (diff >= 0 && diff < activePx) {
+        beatVal = getNormalBeatNoP(diff / activePx);
+        break;
+      }
+    }
+    
+    // f 波基線 (高頻混亂微小波)
+    const fWave = 0.08 * Math.sin(x_abs * 0.15) + 
+                  0.05 * Math.sin(x_abs * 0.28) + 
+                  0.03 * Math.sin(x_abs * 0.45);
+                  
+    return beatVal + fWave;
+  }
+
+  function getVTValue(x_abs, cyclePx) {
+    const t = ((x_abs % cyclePx) + cyclePx) % cyclePx / cyclePx;
+    // 連續、寬大且畸形的單形性 QRS-T
+    let val = 0.75 * Math.sin(2 * Math.PI * t) + 
+              0.20 * Math.sin(4 * Math.PI * t - 0.5) + 
+              0.08 * Math.sin(6 * Math.PI * t);
+    return val * 0.9;
+  }
+
+  function getVFValue(x_abs) {
+    const t = x_abs * 0.05;
+    const amp = 0.55 * (0.5 + 0.4 * Math.abs(Math.sin(t * 0.08)));
+    const val = amp * (Math.sin(t) * 0.7 +
+                       Math.sin(t * 1.67) * 0.5 +
+                       Math.sin(t * 2.33) * 0.35 +
+                       Math.sin(t * 3.11) * 0.2);
+    return val;
+  }
+
+  function getAVB3Value(x_abs, pCycle, qCycle, W) {
+    // 規則的 P 波 (心房率 75 bpm)
+    const x_p = ((x_abs % pCycle) + pCycle) % pCycle;
+    const pActive = W * 60 / 75 / 2.5 * 0.3;
+    let pVal = 0;
+    if (x_p < pActive) {
+      pVal = 0.12 * Math.sin(Math.PI * x_p / pActive);
+    }
+    
+    // 緩慢規則的心室自搏 QRS (心室率 35 bpm，寬 QRS + Discordant T)
+    const x_q = ((x_abs % qCycle) + qCycle) % qCycle;
+    const qrsActive = W * 60 / 75 / 2.5 * 0.8;
+    let qrsVal = 0;
+    if (x_q < qrsActive) {
+      qrsVal = getWideQRS(x_q / qrsActive);
+    }
+    
+    return pVal + qrsVal;
+  }
+
+  // ─── 統一繪圖渲染器 ────────────────────────────────
+  function drawECGWave(rhythmKey) {
     const W = canvas.width, H = canvas.height;
-    const amp = H * 0.35;
+    const amp = H * 0.38;
     const yBase = H * 0.55;
-    const bpm = def.rate;
-    const cyclePx = bpm > 0 ? Math.round(W * 60 / bpm / 2.5) : W; // ~2.5s 可視區
+    const def = RHYTHM_DEFS[rhythmKey];
 
     ctx.clearRect(0, 0, W, H);
     drawGrid(W, H);
 
     ctx.beginPath();
     ctx.strokeStyle = def.color;
-    ctx.lineWidth   = 2;
+    ctx.lineWidth   = 2.2;
     ctx.shadowColor = def.color;
     ctx.shadowBlur  = 6;
 
-    for (let px = 0; px < W; px++) {
-      const t = ((px + offset) % cyclePx) / cyclePx;
-      const a = interpolateWaveform(def.segments, t);
-      const y = yBase - a * amp;
-      if (px === 0) ctx.moveTo(px, y); else ctx.lineTo(px, y);
-    }
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
-
-  function drawAF() {
-    const W = canvas.width, H = canvas.height;
-    const amp = H * 0.32;
-    const yBase = H * 0.55;
-    const cyclePx = Math.round(W * 0.28);
-
-    ctx.clearRect(0, 0, W, H);
-    drawGrid(W, H);
-
-    // f 波基線（雜亂細小波）
-    ctx.beginPath();
-    ctx.strokeStyle = 'rgba(6,182,212,0.4)';
-    ctx.lineWidth = 1;
-    for (let px = 0; px < W; px++) {
-      const noise = Math.sin((px + offset) * 0.28) * 0.06
-                  + Math.sin((px + offset) * 0.53) * 0.04
-                  + Math.sin((px + offset) * 0.71) * 0.03;
-      const y = yBase + noise * amp;
-      if (px === 0) ctx.moveTo(px, y); else ctx.lineTo(px, y);
-    }
-    ctx.stroke();
-
-    // 不規則 QRS（用種子決定間距）
-    ctx.beginPath();
-    ctx.strokeStyle = '#06B6D4';
-    ctx.lineWidth = 2;
-    ctx.shadowColor = '#06B6D4';
-    ctx.shadowBlur  = 6;
-
-    // 生成偽隨機 R-R 間距序列（固定種子，每次相同）
-    const rr = [0.28, 0.22, 0.31, 0.19, 0.26, 0.34, 0.20, 0.29, 0.23, 0.33, 0.18];
-    let pos = 0, drawn = false;
-    while (pos < 1.5) {
-      const rrIdx = Math.floor(pos * 10) % rr.length;
-      const rrLen = rr[rrIdx];
-      const startPx = ((pos * W * 1.5 - offset * 0.8) % (W * 1.5));
-      // QRS 繪製
-      const qrs = [[0,0],[-0.02,-0.18],[0,0.85],[0.04,-0.32],[0.07,0]];
-      qrs.forEach(([dt, da], i) => {
-        const x = startPx + dt * W * 0.15;
-        const y = yBase - da * amp;
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      });
-      pos += rrLen;
-      drawn = true;
-    }
-    if (drawn) ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
-
-  function drawVF() {
-    const W = canvas.width, H = canvas.height;
-    const yBase = H * 0.5;
-
-    ctx.clearRect(0, 0, W, H);
-    drawGrid(W, H);
-
-    ctx.beginPath();
-    ctx.strokeStyle = '#FF4E6A';
-    ctx.lineWidth   = 2;
-    ctx.shadowColor = '#FF4E6A';
-    ctx.shadowBlur  = 8;
+    // 計算各心律之週期 (以寬度 W 為基準，保持比例一致)
+    const nsrCycle = Math.round(W * 60 / 75 / 2.5);
+    const svtCycle = Math.round(W * 60 / 170 / 2.5);
+    const sbCycle  = Math.round(W * 60 / 40 / 2.5);
+    const peaCycle = Math.round(W * 60 / 55 / 2.5);
+    const vtCycle  = Math.round(W * 60 / 160 / 2.5);
+    const pCycle   = Math.round(W * 60 / 75 / 2.5);
+    const qCycle   = Math.round(W * 60 / 35 / 2.5);
+    const activePx = Math.round(W * 60 / 75 / 2.5);
 
     for (let px = 0; px < W; px++) {
-      const t = (px + offset) * 0.04;
-      const amp = H * (0.20 + 0.15 * Math.abs(Math.sin(t * 0.31)));
-      const y = yBase
-        + amp * (Math.sin(t) * 0.7
-        + Math.sin(t * 1.73) * 0.5
-        + Math.sin(t * 2.41) * 0.3
-        + Math.sin(t * 3.14) * 0.2);
-      if (px === 0) ctx.moveTo(px, y); else ctx.lineTo(px, y);
-    }
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
+      const x_abs = px + offset;
+      let a = 0;
 
-  function drawAVB3() {
-    // 心房：規則 P 波（80bpm），心室：慢逸搏（35bpm），兩者完全無關
-    const W = canvas.width, H = canvas.height;
-    const amp    = H * 0.35;
-    const yBase  = H * 0.55;
-    const pCycle = Math.round(W * 60 / 80 / 2.5);   // P 波週期像素
-    const qCycle = Math.round(W * 60 / 35 / 2.5);   // QRS 週期像素
-    const qrsSegs = [[0,0],[0.03,-0.22],[0.07,0.85],[0.13,-0.38],[0.18,0],[0.30,0.10],[0.45,0],[1.0,0]];
-    const pSegs   = [[0,0],[0.15,0.15],[0.30,0.10],[0.45,0],[1.0,0]];
+      if (rhythmKey === 'nsr') {
+        a = getSinusBeat(x_abs, nsrCycle, activePx);
+      } else if (rhythmKey === 'svt') {
+        a = getSVTBeat(x_abs, svtCycle);
+      } else if (rhythmKey === 'af') {
+        a = getAFValue(x_abs, W);
+      } else if (rhythmKey === 'vt') {
+        a = getVTValue(x_abs, vtCycle);
+      } else if (rhythmKey === 'vf') {
+        a = getVFValue(x_abs);
+      } else if (rhythmKey === 'sb') {
+        a = getSinusBeat(x_abs, sbCycle, activePx);
+      } else if (rhythmKey === 'avb3') {
+        a = getAVB3Value(x_abs, pCycle, qCycle, W);
+      } else if (rhythmKey === 'pea') {
+        a = getSinusBeat(x_abs, peaCycle, activePx);
+      }
 
-    ctx.clearRect(0, 0, W, H);
-    drawGrid(W, H);
-
-    // P 波（較小振幅）
-    ctx.beginPath();
-    ctx.strokeStyle = 'rgba(251,146,60,0.6)';
-    ctx.lineWidth   = 1.5;
-    for (let px = 0; px < W; px++) {
-      const t = ((px + offset * 0.44) % pCycle) / pCycle;
-      const a = interpolateWaveform(pSegs, t) * 0.4;
-      const y = yBase - a * amp;
-      if (px === 0) ctx.moveTo(px, y); else ctx.lineTo(px, y);
-    }
-    ctx.stroke();
-
-    // 心室逸搏 QRS（寬）
-    ctx.beginPath();
-    ctx.strokeStyle = '#FB923C';
-    ctx.lineWidth   = 2.5;
-    ctx.shadowColor = '#FB923C';
-    ctx.shadowBlur  = 7;
-    for (let px = 0; px < W; px++) {
-      const t = ((px + offset) % qCycle) / qCycle;
-      const a = interpolateWaveform(qrsSegs, t);
       const y = yBase - a * amp;
       if (px === 0) ctx.moveTo(px, y); else ctx.lineTo(px, y);
     }
@@ -1015,13 +1059,8 @@ function initPractice() {
 
   // ─── 主動畫迴圈 ─────────────────────────────────
   function animate() {
-    const def = RHYTHM_DEFS[currentRhythm];
-    if (currentRhythm === 'af')   drawAF();
-    else if (currentRhythm === 'vf') drawVF();
-    else if (currentRhythm === 'avb3') drawAVB3();
-    else drawStandardWave(def);
-
-    offset = (offset + 1.6) % 10000;
+    drawECGWave(currentRhythm);
+    offset += 2.0; // 滾動速度，以 px/frame 表示
     animId = requestAnimationFrame(animate);
   }
 
