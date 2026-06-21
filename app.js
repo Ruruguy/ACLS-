@@ -120,16 +120,19 @@ function initBasicsTabs() {
 // 正確電極位置（以圖片寬/高百分比表示，以 CPR 安妮正面圖為基準）
 // 病人右側在螢幕左邊，病人左側在螢幕右邊
 const CORRECT_POSITIONS = {
-  RA: { x: 0.28, y: 0.23 },  // 右鎖骨下方 (螢幕左)
-  LA: { x: 0.72, y: 0.23 },  // 左鎖骨下方 (螢幕右)
-  RL: { x: 0.32, y: 0.70 },  // 右下腹 (螢幕左)
-  LL: { x: 0.68, y: 0.70 },  // 左下腹 (螢幕右)
-  V1: { x: 0.46, y: 0.38 },  // 胸骨右緣第4肋 (螢幕左)
-  V2: { x: 0.54, y: 0.38 },  // 胸骨左緣第4肋 (螢幕右)
-  V3: { x: 0.59, y: 0.43 },  // V2–V4 中點 (螢幕右)
-  V4: { x: 0.64, y: 0.48 },  // 左鎖骨中線第5肋 (螢幕右)
-  V5: { x: 0.69, y: 0.48 },  // 前腋線 (螢幕右)
-  V6: { x: 0.74, y: 0.48 },  // 腋中線 (螢幕右)
+  // 四肢導程：黏貼於鎖骨下窩或肢體近端非肌肉骨骼處（安妮正面解剖投影：螢幕左為病人右側，螢幕右為病人左側）
+  RA: { x: 0.25, y: 0.20 },  // 右鎖骨下窩 (螢幕左上)
+  LA: { x: 0.75, y: 0.20 },  // 左鎖骨下窩 (螢幕右上)
+  RL: { x: 0.30, y: 0.80 },  // 右下腹下肢近端 (螢幕左下)
+  LL: { x: 0.70, y: 0.80 },  // 左下腹下肢近端 (螢幕右下)
+
+  // 胸前導程：嚴格符合肋間解剖層次與水平軸線
+  V1: { x: 0.45, y: 0.42 },  // 胸骨右緣第4肋間 (螢幕中間偏左)
+  V2: { x: 0.55, y: 0.42 },  // 胸骨左緣第4肋間 (螢幕中間偏右)
+  V4: { x: 0.62, y: 0.53 },  // 左鎖骨中線第5肋間 (心尖部，解剖軸向左下延伸)
+  V3: { x: 0.58, y: 0.47 },  // V2 與 V4 的幾何與解剖連線中點
+  V5: { x: 0.70, y: 0.53 },  // 左前腋線，第5肋間水平 (與 V4 保持精準水平延伸)
+  V6: { x: 0.78, y: 0.53 },  // 左腋中線，第5肋間水平 (與 V4 保持精準水平延伸)
 };
 
 // 初始散佈位置（將導極按螢幕左右側排列，方便拖曳不交錯）
@@ -793,82 +796,76 @@ function initPractice() {
   resizeCanvas();
   window.addEventListener('resize', () => { resizeCanvas(); });
 
-  // ─── 數學化平滑心電圖波形生成器 ───────────────────
+  // ─── 醫學級電生理：平滑動態心電圖波形生成器 (Lead II 特徵) ───────────────────
+  
+  // 1. 正常竇性心律 (NSR): P正、R高尖、T正
   function getNormalBeat(t) {
     let val = 0;
-    // P 波 (平滑半正弦波)
-    if (t >= 0.06 && t <= 0.12) {
-      val += 0.12 * Math.sin(Math.PI * (t - 0.06) / 0.06);
+    // P 波：心房除極，Lead II 必定正向平滑
+    if (t >= 0.05 && t <= 0.13) {
+      val += 0.15 * Math.sin(Math.PI * (t - 0.05) / 0.08);
     }
-    // QRS 複合波
-    // Q 波 (下陷)
-    if (t >= 0.14 && t <= 0.15) {
-      val -= 0.06 * Math.sin(Math.PI * (t - 0.14) / 0.01);
+    // Q 波：短暫負向
+    if (t >= 0.16 && t <= 0.18) {
+      val -= 0.05 * Math.sin(Math.PI * (t - 0.16) / 0.02);
     }
-    // R 波 (高尖峰)
-    else if (t > 0.15 && t <= 0.17) {
-      if (t <= 0.16) {
-        val += (t - 0.15) / 0.01;
+    // R 波：心室主要除極，Lead II 為高尖正向波
+    if (t > 0.18 && t <= 0.21) {
+      if (t <= 0.195) {
+        val += 1.0 * (t - 0.18) / 0.015;
       } else {
-        val += (0.17 - t) / 0.01;
+        val += 1.0 * (0.21 - t) / 0.015;
       }
     }
-    // S 波 (深下陷)
-    else if (t > 0.17 && t <= 0.185) {
-      if (t <= 0.177) {
-        val -= 0.15 * (t - 0.17) / 0.007;
+    // S 波：心室基底部除極，顯著向下凹陷
+    if (t > 0.21 && t <= 0.24) {
+      if (t <= 0.222) {
+        val -= 0.25 * (t - 0.21) / 0.012;
       } else {
-        val -= 0.15 * (0.185 - t) / 0.008;
+        val -= 0.25 * (0.24 - t) / 0.018;
       }
     }
-    // T 波 (平滑寬正弦波)
-    if (t >= 0.24 && t <= 0.40) {
-      val += 0.22 * Math.sin(Math.PI * (t - 0.24) / 0.16);
+    // T 波：心室復極，與主波方向一致（正向平滑寬波）
+    if (t >= 0.32 && t <= 0.50) {
+      val += 0.25 * Math.sin(Math.PI * (t - 0.32) / 0.18);
     }
     return val;
   }
 
+  // 2. 窄 QRS 無 P 波模型 (用於 AF 心室波)
   function getNormalBeatNoP(t) {
     let val = 0;
-    // QRS
-    if (t >= 0.05 && t <= 0.10) {
-      val -= 0.06 * Math.sin(Math.PI * (t - 0.05) / 0.05);
+    if (t >= 0.02 && t <= 0.04) val -= 0.05 * Math.sin(Math.PI * (t - 0.02) / 0.02);
+    if (t > 0.04 && t <= 0.07) {
+      if (t <= 0.055) val += 0.9 * (t - 0.04) / 0.015;
+      else val += 0.9 * (0.07 - t) / 0.015;
     }
-    else if (t > 0.10 && t <= 0.20) {
-      if (t <= 0.15) {
-        val += 0.85 * (t - 0.10) / 0.05;
-      } else {
-        val += 0.85 * (0.20 - t) / 0.05;
-      }
+    if (t > 0.07 && t <= 0.10) {
+      if (t <= 0.082) val -= 0.2 * (t - 0.07) / 0.012;
+      else val -= 0.2 * (0.10 - t) / 0.018;
     }
-    else if (t > 0.20 && t <= 0.28) {
-      if (t <= 0.24) {
-        val -= 0.15 * (t - 0.20) / 0.04;
-      } else {
-        val -= 0.15 * (0.28 - t) / 0.04;
-      }
-    }
-    // T 波
-    if (t >= 0.40 && t <= 0.90) {
-      val += 0.22 * Math.sin(Math.PI * (t - 0.40) / 0.50);
+    if (t >= 0.18 && t <= 0.36) {
+      val += 0.23 * Math.sin(Math.PI * (t - 0.18) / 0.18);
     }
     return val;
   }
 
+  // 3. 畸形寬大 QRS 模型 (用於 3° AVB 的心室自搏心律)
   function getWideQRS(t) {
     let val = 0;
-    // 寬 QRS (0.0 到 0.22) - 寬而有切跡 (slurred notch)
-    if (t >= 0.0 && t <= 0.22) {
-      val += 0.8 * Math.sin(Math.PI * t / 0.22);
-      val += 0.15 * Math.sin(3 * Math.PI * t / 0.22);
+    // 傳導阻滯導致除極變慢：QRS 寬大且有切跡 (Notch)
+    if (t >= 0.0 && t <= 0.25) {
+      val += 0.75 * Math.sin(Math.PI * t / 0.25);
+      val += 0.18 * Math.sin(3 * Math.PI * t / 0.25); // 電氣切跡
     }
-    // 相反方向的 discordant T 波 (0.22 到 0.80)
-    if (t > 0.22 && t <= 0.80) {
-      val -= 0.26 * Math.sin(Math.PI * (t - 0.22) / 0.58);
+    // ST-T 繼發性改變：T波方向通常與 QRS 主波相反 (Discordant T)
+    if (t > 0.25 && t <= 0.85) {
+      val -= 0.28 * Math.sin(Math.PI * (t - 0.25) / 0.60);
     }
     return val;
   }
 
+  // 4. 竇性節律觸發器
   function getSinusBeat(x_abs, cyclePx, activePx) {
     const x_mod = ((x_abs % cyclePx) + cyclePx) % cyclePx;
     if (x_mod < activePx) {
@@ -877,38 +874,32 @@ function initPractice() {
     return 0;
   }
 
+  // 5. 上心室頻脈 (SVT): 極速、窄QRS、P埋在裡面
   function getSVTBeat(x_abs, cyclePx) {
-    const x_mod = ((x_abs % cyclePx) + cyclePx) % cyclePx;
-    const t = x_mod / cyclePx;
+    const t = (((x_abs % cyclePx) + cyclePx) % cyclePx) / cyclePx;
     let val = 0;
-    // QRS (窄，佔14%週期)
-    if (t >= 0.00 && t <= 0.03) {
-      val -= 0.06 * Math.sin(Math.PI * t / 0.03);
+    // 窄 QRS 佔據週期的前段
+    if (t >= 0.00 && t <= 0.04) val -= 0.05 * Math.sin(Math.PI * t / 0.04);
+    else if (t > 0.04 && t <= 0.12) {
+      if (t <= 0.08) val += 0.9 * (t - 0.04) / 0.04;
+      else val += 0.9 * (0.12 - t) / 0.04;
     }
-    else if (t > 0.03 && t <= 0.09) {
-      if (t <= 0.06) {
-        val += 0.85 * (t - 0.03) / 0.03;
-      } else {
-        val += 0.85 * (0.09 - t) / 0.03;
-      }
+    else if (t > 0.12 && t <= 0.18) {
+      if (t <= 0.15) val -= 0.2 * (t - 0.12) / 0.03;
+      else val -= 0.2 * (0.18 - t) / 0.03;
     }
-    else if (t > 0.09 && t <= 0.14) {
-      if (t <= 0.11) {
-        val -= 0.15 * (t - 0.09) / 0.02;
-      } else {
-        val -= 0.15 * (0.14 - t) / 0.03;
-      }
-    }
-    // T 波 (寬且與下一個 QRS 連續)
-    if (t >= 0.14 && t <= 0.90) {
-      val += 0.28 * Math.sin(Math.PI * (t - 0.14) / 0.76);
+    // 由於心率過快，逆行P波或復極T波融合成一個連續的正向寬波
+    if (t >= 0.18 && t <= 0.95) {
+      val += 0.32 * Math.sin(Math.PI * (t - 0.18) / 0.77);
     }
     return val;
   }
 
+  // 6. 心房顫動 (AF): R-R絕對不規則 + 基線高頻顫動 f 波
   function getAFValue(x_abs, W) {
     const baseCycle = W * 60 / 110 / 2.5;
-    const rrFractions = [1.1, 0.85, 1.2, 0.75, 1.0, 1.3, 0.8, 1.15, 0.95, 1.25];
+    // 臨床經典：絕對不規則的 R-R 間期序列
+    const rrFractions = [1.25, 0.75, 1.4, 0.65, 1.1, 1.35, 0.7, 1.2, 0.85, 1.05];
     let beatPositions = [];
     let acc = 0;
     for (let f of rrFractions) {
@@ -919,7 +910,7 @@ function initPractice() {
     const x_mod = ((x_abs % totalPeriod) + totalPeriod) % totalPeriod;
     
     let beatVal = 0;
-    const activePx = W * 60 / 75 / 2.5; // 正常 QRS-T 的寬度
+    const activePx = W * 60 / 75 / 2.5; 
     
     for (let i = 0; i < beatPositions.length; i++) {
       const bp = beatPositions[i];
@@ -933,53 +924,57 @@ function initPractice() {
       }
     }
     
-    // f 波基線 (高頻混亂微小波)
-    const fWave = 0.08 * Math.sin(x_abs * 0.15) + 
-                  0.05 * Math.sin(x_abs * 0.28) + 
-                  0.03 * Math.sin(x_abs * 0.45);
+    // 心房混亂顫動基線 (由多重弦波疊加而成的生理雜訊)
+    const fWave = 0.09 * Math.sin(x_abs * 0.18) + 
+                  0.04 * Math.sin(x_abs * 0.35) + 
+                  0.02 * Math.sin(x_abs * 0.55);
                   
     return beatVal + fWave;
   }
 
+  // 7. 心室頻脈 (VT): 源自心室傳導，Lead II 必為連續、寬大、畸形且反向倒置的單形性巨波
   function getVTValue(x_abs, cyclePx) {
-    const t = ((x_abs % cyclePx) + cyclePx) % cyclePx / cyclePx;
-    // 連續、寬大且畸形的單形性 QRS-T
-    let val = 0.75 * Math.sin(2 * Math.PI * t) + 
-              0.20 * Math.sin(4 * Math.PI * t - 0.5) + 
-              0.08 * Math.sin(6 * Math.PI * t);
-    return val * 0.9;
-  }
-
-  function getVFValue(x_abs) {
-    const t = x_abs * 0.05;
-    const amp = 0.55 * (0.5 + 0.4 * Math.abs(Math.sin(t * 0.08)));
-    const val = amp * (Math.sin(t) * 0.7 +
-                       Math.sin(t * 1.67) * 0.5 +
-                       Math.sin(t * 2.33) * 0.35 +
-                       Math.sin(t * 3.11) * 0.2);
+    const t = (((x_abs % cyclePx) + cyclePx) % cyclePx) / cyclePx;
+    // 醫學特徵：心室除極向量完全逆轉，呈現連續寬大倒置波
+    let val = -0.85 * Math.sin(2 * Math.PI * t) - 
+              0.22 * Math.sin(4 * Math.PI * t - 0.6) - 
+              0.05 * Math.sin(6 * Math.PI * t);
     return val;
   }
 
+  // 8. 心室顫動 (VF): 致命混亂微波，完全失去基本心電圖結構
+  function getVFValue(x_abs) {
+    const t = x_abs * 0.06;
+    // 生理學多形性包絡線：使振幅動態隨機波動
+    const envelope = 0.5 * (0.6 + 0.4 * Math.sin(t * 0.05) * Math.cos(t * 0.02));
+    const val = envelope * (Math.sin(t) * 0.75 +
+                            Math.sin(t * 1.42) * 0.45 +
+                            Math.sin(t * 2.85) * 0.30 +
+                            Math.sin(t * 4.17) * 0.15);
+    return val;
+  }
+
+  // 9. 三度房室傳導阻滯 (AVB3): 心房(P波)與心室(寬QRS)完全分離，各走各的
   function getAVB3Value(x_abs, pCycle, qCycle, W) {
-    // 規則的 P 波 (心房率 75 bpm)
+    // 心房竇房結仍規則發電：產生頻率約 75 bpm 的標準正向 P 波
     const x_p = ((x_abs % pCycle) + pCycle) % pCycle;
-    const pActive = W * 60 / 75 / 2.5 * 0.3;
+    const pActive = W * 60 / 75 / 2.5 * 0.25;
     let pVal = 0;
     if (x_p < pActive) {
-      pVal = 0.12 * Math.sin(Math.PI * x_p / pActive);
+      pVal = 0.16 * Math.sin(Math.PI * x_p / pActive);
     }
     
-    // 緩慢規則的心室自搏 QRS (心室率 35 bpm，寬 QRS + Discordant T)
+    // 心室自搏心律：傳導受阻，心室自主放電極慢 (約 35 bpm)，且波形為寬大畸形的 QRS-T
     const x_q = ((x_abs % qCycle) + qCycle) % qCycle;
-    const qrsActive = W * 60 / 75 / 2.5 * 0.8;
+    const qrsActive = W * 60 / 75 / 2.5 * 0.85;
     let qrsVal = 0;
     if (x_q < qrsActive) {
       qrsVal = getWideQRS(x_q / qrsActive);
     }
     
+    // 兩者電氣在基線上隨機相遇重疊 (完美重現房室分離解剖生理現象)
     return pVal + qrsVal;
   }
-
   // ─── 統一繪圖渲染器 ────────────────────────────────
   function drawECGWave(rhythmKey) {
     const W = canvas.width, H = canvas.height;
