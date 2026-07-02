@@ -1,516 +1,207 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="12導程心電圖教學訓練平台 — 涵蓋導程黏貼練習、STEMI/VT/緩脈心電圖判讀、互動測驗與圖形上傳分析，專為急救教學者設計。">
-  <title>12導程心電圖教學平台 | ECG Training</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>救護助手</title>
+  
+  <!-- PWA Web App Meta Tags for iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="救護助手">
+  
+  <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-  <!-- ECG 動態背景 -->
-  <canvas id="ecg-bg-canvas" aria-hidden="true"></canvas>
+  <!-- Fullscreen Breathing and Shock Alert Overlay -->
+  <div id="vent-overlay" class="vent-flash-overlay">
+    <div id="vent-text" class="vent-text">給氧</div>
+  </div>
 
-  <!-- 頁首 -->
-  <header class="site-header">
-    <a class="site-logo" href="#">
-      <span class="logo-icon">❤️</span>
-      <h1>12導程心電圖教學平台</h1>
-    </a>
-    <span class="header-badge">ACLS 2025</span>
-  </header>
-
-  <!-- Tab 導覽列 -->
-  <nav class="tab-nav" role="tablist" aria-label="教學模組導覽">
-    <button class="tab-btn active" role="tab" aria-selected="true"  data-tab="overview" id="tab-btn-overview">
-      <span class="tab-icon">📋</span> 教學總覽
-    </button>
-    <button class="tab-btn" role="tab" aria-selected="false" data-tab="lead" id="tab-btn-lead">
-      <span class="tab-icon">🫀</span> 黏貼練習
-    </button>
-    <button class="tab-btn" role="tab" aria-selected="false" data-tab="practice" id="tab-btn-practice">
-        <span class="tab-icon">⚡</span> 心律判讀
-      </button>
-    <button class="tab-btn" role="tab" aria-selected="false" data-tab="basics" id="tab-btn-basics">
-      <span class="tab-icon">📚</span> 基礎課程
-    </button>
-    <button class="tab-btn" role="tab" aria-selected="false" data-tab="quiz" id="tab-btn-quiz">
-      <span class="tab-icon">🎯</span> 判讀測驗
-    </button>
-    <button class="tab-btn" role="tab" aria-selected="false" data-tab="upload" id="tab-btn-upload">
-      <span class="tab-icon">📤</span> 上傳分析
-    </button>
-  </nav>
-
-  <main class="site-main">
-
-    <!-- ══════════════════════════════════════════
-         模組一：教學總覽
-    ══════════════════════════════════════════ -->
-    <section id="panel-overview" class="tab-panel active" role="tabpanel" aria-labelledby="tab-btn-overview">
-      <div class="section-header">
-        <h2>🫀 12導程心電圖教學平台</h2>
-        <p>以 ACLS 2025 最新指引為基礎，提供完整互動式教學體驗</p>
-      </div>
-
-      <!-- 統計數字 -->
-      <div class="overview-grid">
-        <div class="overview-stat">
-          <div class="stat-icon">📍</div>
-          <div class="stat-num">10</div>
-          <div class="stat-label">導程電極位置</div>
-        </div>
-        <div class="overview-stat">
-          <div class="stat-icon">🎯</div>
-          <div class="stat-num">10</div>
-          <div class="stat-label">判讀測驗題目</div>
-        </div>
-        <div class="overview-stat">
-          <div class="stat-icon">📸</div>
-          <div class="stat-num">12</div>
-          <div class="stat-label">教學示範實拍</div>
-        </div>
-        <div class="overview-stat">
-          <div class="stat-icon">⚡</div>
-          <div class="stat-num">3</div>
-          <div class="stat-label">心律辨識模組</div>
-        </div>
-      </div>
-
-      <!-- 三大學習重點 -->
-      <div class="card">
-        <div class="card-title"><span class="icon">📌</span> 三大教學重點</div>
-        <div class="card-body">
-          <ul style="list-style:none;display:flex;flex-direction:column;gap:0.75rem;">
-            <li style="display:flex;gap:0.75rem;align-items:flex-start;">
-              <span style="color:var(--ecg-green);font-size:1.1rem;flex-shrink:0;">①</span>
-              <div>
-                <strong style="color:var(--text-primary);">導程電極正確黏貼</strong><br>
-                <span style="font-size:0.83rem;">四肢導程（RA/LA/RL/LL）+ 胸前六導（V1–V6）共 10 個電極，位置正確是判讀品質的基礎。</span>
-              </div>
-            </li>
-            <li style="display:flex;gap:0.75rem;align-items:flex-start;">
-              <span style="color:var(--ecg-blue);font-size:1.1rem;flex-shrink:0;">②</span>
-              <div>
-                <strong style="color:var(--text-primary);">系統化判讀步驟</strong><br>
-                <span style="font-size:0.83rem;">心率 → 心律 → P波 → PR間期 → QRS寬度 → ST段 → T波，依序判讀不遺漏。</span>
-              </div>
-            </li>
-            <li style="display:flex;gap:0.75rem;align-items:flex-start;">
-              <span style="color:var(--ecg-yellow);font-size:1.1rem;flex-shrink:0;">③</span>
-              <div>
-                <strong style="color:var(--text-primary);">危急心律辨識</strong><br>
-                <span style="font-size:0.83rem;">STEMI（心肌梗塞）、VT（心室頻脈）、VF（心室顫動）是院前最重要的危急心律，需快速識別並啟動流程。</span>
-              </div>
-            </li>
-          </ul>
-        </div>
-      </div>
-
-      <!-- ACLS 2025 流程圖 -->
-      <div class="card">
-        <div class="card-title"><span class="icon">🗂️</span> ACLS 2025 快速查閱流程圖</div>
-        <div class="card-body" style="margin-bottom:0.75rem;">點擊圖片可放大查看</div>
-        <div class="flowchart-grid">
-          <a class="flowchart-card" href="參考資料/2025流程01.jpg" target="_blank" rel="noopener">
-            <img src="參考資料/2025流程01.jpg" alt="ACLS 2025 流程圖 01" loading="lazy">
-            <div class="flowchart-card-label">流程圖 01</div>
-          </a>
-          <a class="flowchart-card" href="參考資料/2025流程02.jpg" target="_blank" rel="noopener">
-            <img src="參考資料/2025流程02.jpg" alt="ACLS 2025 流程圖 02" loading="lazy">
-            <div class="flowchart-card-label">流程圖 02</div>
-          </a>
-          <a class="flowchart-card" href="參考資料/2025流程03.jpg" target="_blank" rel="noopener">
-            <img src="參考資料/2025流程03.jpg" alt="ACLS 2025 流程圖 03" loading="lazy">
-            <div class="flowchart-card-label">流程圖 03</div>
-          </a>
-        </div>
-      </div>
-    </section>
-
-    <!-- ══════════════════════════════════════════
-         模組二：12導程黏貼練習
-    ══════════════════════════════════════════ -->
-    <section id="panel-lead" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-lead">
-      <div class="section-header">
-        <h2>🫀 12導程黏貼練習</h2>
-        <p>拖曳電極標籤至正確位置，完成後顯示答案確認</p>
-      </div>
-
-      <div class="card">
-        <div class="lead-layout">
-          <!-- 左：人體模型 + 拖曳區 -->
-          <div>
-            <div class="lead-canvas-wrap">
-              <img src="ＣＰＲ安尼.png" alt="CPR 安妮人體模型正面圖" class="torso-img" id="torso-img">
-              <div id="lead-drop-zone" aria-label="電極拖曳目標區"></div>
-            </div>
-            <div class="lead-controls">
-              <button class="btn btn-primary" id="check-lead-btn">✅ 顯示正確位置</button>
-              <button class="btn btn-secondary" id="reset-lead-btn">🔄 重置</button>
-            </div>
-            <div id="lead-feedback" style="margin-top:0.75rem;font-size:0.82rem;color:var(--ecg-green);display:none;"></div>
-          </div>
-
-          <!-- 右：導程說明 -->
-          <div>
-            <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.6rem;letter-spacing:0.04em;">🔴 四肢導程 &nbsp; 🔵 胸前導程</p>
-            <ul class="lead-info-list" id="lead-info-list">
-              <li class="lead-info-item" style="border-left-color:var(--ecg-red);">
-                <span class="lead-badge limb">RA</span>
-                <span><strong>右臂（Right Arm）</strong>：右鎖骨下方，避開肌肉</span>
-              </li>
-              <li class="lead-info-item" style="border-left-color:var(--ecg-red);">
-                <span class="lead-badge limb">LA</span>
-                <span><strong>左臂（Left Arm）</strong>：左鎖骨下方，避開肌肉</span>
-              </li>
-              <li class="lead-info-item" style="border-left-color:var(--ecg-red);">
-                <span class="lead-badge limb">RL</span>
-                <span><strong>右腳（Right Leg）</strong>：右下腹 / 右腳踝內側（接地電極）</span>
-              </li>
-              <li class="lead-info-item" style="border-left-color:var(--ecg-red);">
-                <span class="lead-badge limb">LL</span>
-                <span><strong>左腳（Left Leg）</strong>：左下腹 / 左腳踝內側</span>
-              </li>
-              <li class="lead-info-item" style="border-left-color:var(--ecg-blue);">
-                <span class="lead-badge chest">V1</span>
-                <span>胸骨<strong>右</strong>緣第 4 肋間</span>
-              </li>
-              <li class="lead-info-item" style="border-left-color:var(--ecg-blue);">
-                <span class="lead-badge chest">V2</span>
-                <span>胸骨<strong>左</strong>緣第 4 肋間</span>
-              </li>
-              <li class="lead-info-item" style="border-left-color:var(--ecg-blue);">
-                <span class="lead-badge chest">V3</span>
-                <span>V2 與 V4 連線中點</span>
-              </li>
-              <li class="lead-info-item" style="border-left-color:var(--ecg-blue);">
-                <span class="lead-badge chest">V4</span>
-                <span>左鎖骨中線第 5 肋間</span>
-              </li>
-              <li class="lead-info-item" style="border-left-color:var(--ecg-blue);">
-                <span class="lead-badge chest">V5</span>
-                <span>左前腋線，V4 水平延伸</span>
-              </li>
-              <li class="lead-info-item" style="border-left-color:var(--ecg-blue);">
-                <span class="lead-badge chest">V6</span>
-                <span>左腋中線，V4 水平延伸</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      <!-- 實拍教學示範 -->
-      <div class="card">
-        <div class="card-title"><span class="icon">📸</span> 教學實拍示範（點擊放大）</div>
-        <div class="card-body">實際操作時黏貼位置示範，供學員對照參考</div>
-        <div class="photo-gallery" id="photo-gallery">
-          <!-- 由 JS 動態插入圖片 -->
-        </div>
-      </div>
-    </section>
-
-    <!-- ══════════════════════════════════════════
-         模組二：心律判讀練習
-    ══════════════════════════════════════════ -->
-    <section id="panel-practice" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-practice">
-      <div class="section-header">
-        <h2>⚡ 心律判讀練習</h2>
-        <p>觀察動態心電圖波形，辨識心律類型。學習模式顯示提示，挑戰模式測試你的判讀能力。</p>
-      </div>
-
-      <!-- 模式選擇列 -->
-      <div class="practice-mode-bar">
-        <button class="btn btn-primary active-mode" id="practice-mode-learn">📖 學習模式</button>
-        <button class="btn btn-secondary" id="practice-mode-challenge">🧩 挑戰模式</button>
-        <span id="practice-score-display" style="margin-left:auto;color:var(--ecg-green);font-weight:700;font-size:0.9rem;"></span>
-      </div>
-
-      <!-- 心律選擇器（學習模式）-->
-      <div id="practice-rhythm-selector" class="practice-rhythm-selector">
-        <button class="rhythm-btn active" data-rhythm="nsr">🟢 正常竇性心律</button>
-        <button class="rhythm-btn" data-rhythm="svt">🟡 上心室頻脈 SVT</button>
-        <button class="rhythm-btn" data-rhythm="af">🔵 心房顫動 AF</button>
-        <button class="rhythm-btn" data-rhythm="vt">🔴 心室頻脈 VT</button>
-        <button class="rhythm-btn" data-rhythm="vf">⚫ 心室顫動 VF</button>
-        <button class="rhythm-btn" data-rhythm="sb">🩵 竇性心搏過緩</button>
-        <button class="rhythm-btn" data-rhythm="avb3">🟠 三度房室傳導阻滯</button>
-        <button class="rhythm-btn" data-rhythm="pea">🔵 無脈性電氣活動 PEA</button>
-      </div>
-
-      <!-- ECG 波形畫布 -->
-      <div class="practice-canvas-wrap">
-        <div class="practice-grid-label">Lead II</div>
-        <canvas id="practice-ecg-canvas" aria-label="心律練習動態心電圖" role="img"></canvas>
-        <div class="practice-rate-bar">
-          <span id="practice-rate-display">❤️ -- bpm</span>
-          <span id="practice-rhythm-display"></span>
-        </div>
-      </div>
-
-      <!-- 學習模式：臨床說明卡 -->
-      <div id="practice-info-card" class="practice-info-card">
-        <div id="practice-info-title" class="practice-info-title"></div>
-        <ul id="practice-info-list" class="criteria-list"></ul>
-        <div id="practice-info-action" class="alert-box" style="margin-top:0.75rem;"></div>
-      </div>
-
-      <!-- 挑戰模式：答題區 -->
-      <div id="practice-challenge-area" class="practice-challenge-area" style="display:none;">
-        <p id="practice-challenge-q" style="font-size:0.95rem;font-weight:600;color:var(--text-primary);margin-bottom:0.75rem;">這是哪一種心律？</p>
-        <div id="practice-challenge-choices" class="quiz-choices" style="max-width:520px;"></div>
-        <div id="practice-challenge-result" style="margin-top:0.75rem;font-size:0.88rem;"></div>
-        <button class="btn btn-primary" id="practice-challenge-next" style="margin-top:1rem;display:none;">下一題 →</button>
-      </div>
-    </section>
-
-    <!-- ══════════════════════════════════════════
-         模組三：心電圖基礎課程
-    ══════════════════════════════════════════ -->
-    <section id="panel-basics" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-basics">
-      <div class="section-header">
-        <h2>📚 心電圖基礎課程</h2>
-        <p>選擇心律類型，查看辨識要點與參考圖</p>
-      </div>
-
-      <div class="card">
-        <!-- 子主題 Tab -->
-        <div class="basics-tabs" role="tablist">
-          <button class="basics-tab-btn active" data-basics="stemi" role="tab">🔴 STEMI 心肌梗塞</button>
-          <button class="basics-tab-btn" data-basics="vt" role="tab">🟡 VT 心室頻脈</button>
-          <button class="basics-tab-btn" data-basics="normal" role="tab">🟢 正常心電圖</button>
-        </div>
-
-        <!-- STEMI -->
-        <div class="basics-panel active" id="basics-stemi">
-          <img src="Stemi.png" alt="STEMI 心電圖參考圖" class="ecg-ref-img" loading="lazy">
-          <div class="ecg-criteria">
-            <h3>🔴 STEMI 診斷標準</h3>
-            <ul class="criteria-list">
-              <li><span class="ci">▶</span> 相鄰兩個以上導程 ST 段抬高</li>
-              <li><span class="ci">▶</span> 肢體導程（I、II、III、aVL、aVF）≥ 1 mm</li>
-              <li><span class="ci">▶</span> 胸前導程（V1–V6）男性 ≥ 2 mm、女性 ≥ 1.5 mm</li>
-              <li><span class="ci">▶</span> 可見超急性 T 波（高尖T）</li>
-              <li><span class="ci">▶</span> 後壁梗塞：V1–V3 ST 下降為等位改變</li>
-            </ul>
-            <div class="alert-box">
-              ⚠️ <strong>院前目標</strong>：Door-to-Balloon ≤ 90 分鐘。發現 STEMI 立即啟動導管室，提前通報醫院。
-            </div>
-            <div style="margin-top:0.75rem;">
-              <strong style="color:var(--text-primary);font-size:0.88rem;">梗塞部位定位：</strong>
-              <table style="width:100%;font-size:0.78rem;color:var(--text-secondary);margin-top:0.4rem;border-collapse:collapse;">
-                <tr style="border-bottom:1px solid var(--border);">
-                  <td style="padding:0.25rem 0.5rem;">前壁</td><td>V1–V4（LAD）</td>
-                </tr>
-                <tr style="border-bottom:1px solid var(--border);">
-                  <td style="padding:0.25rem 0.5rem;">下壁</td><td>II, III, aVF（RCA）</td>
-                </tr>
-                <tr style="border-bottom:1px solid var(--border);">
-                  <td style="padding:0.25rem 0.5rem;">側壁</td><td>I, aVL, V5–V6（LCx）</td>
-                </tr>
-                <tr>
-                  <td style="padding:0.25rem 0.5rem;">後壁</td><td>V7–V9（RCA/LCx）</td>
-                </tr>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <!-- VT -->
-        <div class="basics-panel" id="basics-vt">
-          <img src="VT.png" alt="VT 心室頻脈心電圖參考圖" class="ecg-ref-img" loading="lazy">
-          <div class="ecg-criteria">
-            <h3>🟡 VT 心室頻脈診斷標準</h3>
-            <ul class="criteria-list">
-              <li><span class="ci">▶</span> 心跳速率 ≥ 100 次/分（通常 150–200 bpm）</li>
-              <li><span class="ci">▶</span> QRS 寬度 ≥ 0.12 秒（寬而怪異）</li>
-              <li><span class="ci">▶</span> 節律規則或輕微不規則</li>
-              <li><span class="ci">▶</span> P 波難以辨識或與 QRS 無關（AV 分離）</li>
-              <li><span class="ci">▶</span> 可能有房室捕獲（capture beat）或融合波</li>
-            </ul>
-            <div class="alert-box">
-              ⚠️ <strong>有脈 VT</strong>：考慮同步整流 100J（雙相波）。<strong>無脈 VT</strong>：視同 VF，立即 CPR + 去顫 200J。
-            </div>
-            <div class="info-box">
-              💡 <strong>鑑別診斷</strong>：SVT 伴差異傳導亦可呈現寬 QRS。院前若無法確定，統一視為 VT 處理較為安全。
-            </div>
-          </div>
-        </div>
-
-        <!-- 正常 -->
-        <div class="basics-panel" id="basics-normal">
-          <img src="無明顯.png" alt="正常竇性心律心電圖參考圖" class="ecg-ref-img" loading="lazy">
-          <div class="ecg-criteria">
-            <h3>🟢 正常竇性心律特徵</h3>
-            <ul class="criteria-list">
-              <li><span class="ci">▶</span> 心跳 60–100 次/分（竇性心率）</li>
-              <li><span class="ci">▶</span> 每個 QRS 前均有 P 波，且形態一致</li>
-              <li><span class="ci">▶</span> PR 間期 0.12–0.20 秒（3–5 小格）</li>
-              <li><span class="ci">▶</span> QRS 寬度 ≤ 0.12 秒（3 小格以內）</li>
-              <li><span class="ci">▶</span> ST 段位於基線（無明顯抬高或下降）</li>
-              <li><span class="ci">▶</span> T 波直立（aVR 除外）</li>
-            </ul>
-            <div class="success-box">
-              ✅ 正常竇性心律不代表無危急病況，仍須結合臨床症狀（胸痛、意識改變、血壓異常）整體評估。
-            </div>
-            <div class="info-box">
-              💡 <strong>判讀順序</strong>：心率 → 節律 → P 波 → PR → QRS → ST → T，系統化不遺漏。
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 判讀步驟提醒 -->
-      <div class="card">
-        <div class="card-title"><span class="icon">📐</span> 系統化判讀 7 步驟</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.6rem;margin-top:0.25rem;">
-          <div style="background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.2);border-radius:8px;padding:0.6rem 0.8rem;font-size:0.82rem;">
-            <div style="color:var(--ecg-green);font-weight:700;margin-bottom:0.2rem;">Step 1</div>
-            <div style="color:var(--text-secondary);">心率（Rate）</div>
-          </div>
-          <div style="background:rgba(0,207,255,0.06);border:1px solid rgba(0,207,255,0.2);border-radius:8px;padding:0.6rem 0.8rem;font-size:0.82rem;">
-            <div style="color:var(--ecg-blue);font-weight:700;margin-bottom:0.2rem;">Step 2</div>
-            <div style="color:var(--text-secondary);">節律（Rhythm）</div>
-          </div>
-          <div style="background:rgba(255,209,102,0.06);border:1px solid rgba(255,209,102,0.2);border-radius:8px;padding:0.6rem 0.8rem;font-size:0.82rem;">
-            <div style="color:var(--ecg-yellow);font-weight:700;margin-bottom:0.2rem;">Step 3</div>
-            <div style="color:var(--text-secondary);">P 波（P wave）</div>
-          </div>
-          <div style="background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.2);border-radius:8px;padding:0.6rem 0.8rem;font-size:0.82rem;">
-            <div style="color:var(--ecg-green);font-weight:700;margin-bottom:0.2rem;">Step 4</div>
-            <div style="color:var(--text-secondary);">PR 間期</div>
-          </div>
-          <div style="background:rgba(0,207,255,0.06);border:1px solid rgba(0,207,255,0.2);border-radius:8px;padding:0.6rem 0.8rem;font-size:0.82rem;">
-            <div style="color:var(--ecg-blue);font-weight:700;margin-bottom:0.2rem;">Step 5</div>
-            <div style="color:var(--text-secondary);">QRS 寬度</div>
-          </div>
-          <div style="background:rgba(255,78,106,0.06);border:1px solid rgba(255,78,106,0.2);border-radius:8px;padding:0.6rem 0.8rem;font-size:0.82rem;">
-            <div style="color:var(--ecg-red);font-weight:700;margin-bottom:0.2rem;">Step 6</div>
-            <div style="color:var(--text-secondary);">ST 段</div>
-          </div>
-          <div style="background:rgba(255,209,102,0.06);border:1px solid rgba(255,209,102,0.2);border-radius:8px;padding:0.6rem 0.8rem;font-size:0.82rem;">
-            <div style="color:var(--ecg-yellow);font-weight:700;margin-bottom:0.2rem;">Step 7</div>
-            <div style="color:var(--text-secondary);">T 波形態</div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ══════════════════════════════════════════
-         模組四：判讀測驗
-    ══════════════════════════════════════════ -->
-    <section id="panel-quiz" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-quiz">
-      <div class="section-header">
-        <h2>🎯 判讀測驗</h2>
-        <p>10 道心電圖判讀題，完成後查看得分與解析</p>
-      </div>
-
-      <!-- 進度條 -->
-      <div class="quiz-progress-wrap" id="quiz-progress-wrap">
-        <div class="quiz-progress-info">
-          <span id="quiz-progress-text">第 1 題 / 共 10 題</span>
-          <span id="quiz-score-text">得分：0</span>
-        </div>
-        <div class="quiz-progress-bar">
-          <div class="quiz-progress-fill" id="quiz-progress-fill" style="width:10%"></div>
-        </div>
-      </div>
-
-      <!-- 題目容器 -->
-      <div id="quiz-question-area"></div>
-
-      <!-- 導覽按鈕 -->
-      <div class="quiz-nav" id="quiz-nav">
-        <button class="btn btn-secondary" id="quiz-prev-btn" disabled>← 上一題</button>
-        <button class="btn btn-primary" id="quiz-next-btn" disabled>下一題 →</button>
-      </div>
-
-      <!-- 成績看板 -->
-      <div class="quiz-score-board" id="quiz-score-board">
-        <div class="score-circle" id="score-circle">
-          <div class="score-big" id="score-num">0</div>
-          <div class="score-denom">/ 10</div>
-        </div>
-        <div class="score-msg" id="score-msg"></div>
-        <div class="score-detail" id="score-detail"></div>
-        <div style="margin-top:1.5rem;display:flex;gap:0.75rem;justify-content:center;flex-wrap:wrap;">
-          <button class="btn btn-primary" id="quiz-restart-btn">🔄 重新測驗</button>
-          <button class="btn btn-secondary" id="quiz-review-btn">📋 查看解析</button>
-        </div>
-      </div>
-
-      <!-- 解析列表（測驗後顯示） -->
-      <div id="quiz-review-area" style="display:none;margin-top:1rem;"></div>
-    </section>
-
-    <!-- ══════════════════════════════════════════
-         模組五：上傳分析
-    ══════════════════════════════════════════ -->
-    <section id="panel-upload" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-upload">
-      <div class="section-header">
-        <h2>📤 心電圖上傳分析</h2>
-        <p>上傳心電圖圖片，系統辨識類型並顯示對照參考圖</p>
-      </div>
-
-      <div class="card">
-        <div class="upload-zone" id="upload-zone">
-          <input type="file" id="ecg-file-input" accept="image/*" aria-label="上傳心電圖圖檔">
-          <div class="upload-icon">🖼️</div>
-          <div class="upload-text">點擊或拖曳圖片至此處</div>
-          <div class="upload-sub">支援 JPG、PNG、GIF 格式</div>
-        </div>
-
-        <canvas id="ecg-canvas-preview" aria-label="上傳圖片預覽"></canvas>
-
-        <div style="text-align:center;margin-top:0.75rem;">
-          <button class="btn btn-primary" id="analyze-btn">⚡ 分析圖形</button>
-        </div>
-
-        <div class="analysis-result" id="analysis-result">
-          <div class="result-title" id="result-title"></div>
-          <div class="result-body" id="result-body"></div>
-          <img class="result-ref-img" id="result-ref-img" alt="判讀參考圖">
-        </div>
-      </div>
-
-      <!-- 提示說明 -->
-      <div class="card">
-        <div class="card-title"><span class="icon">💡</span> 使用提示</div>
-        <ul style="list-style:none;display:flex;flex-direction:column;gap:0.5rem;">
-          <li style="font-size:0.84rem;color:var(--text-secondary);display:flex;gap:0.5rem;">
-            <span style="color:var(--ecg-red);">●</span>
-            上傳<strong style="color:var(--text-primary);">「stemi」</strong>開頭或包含 stemi 字眼的檔案 → 顯示 STEMI 對照圖
-          </li>
-          <li style="font-size:0.84rem;color:var(--text-secondary);display:flex;gap:0.5rem;">
-            <span style="color:var(--ecg-yellow);">●</span>
-            上傳包含<strong style="color:var(--text-primary);">「VT」或「vt」</strong>的檔案 → 顯示心室頻脈對照圖
-          </li>
-          <li style="font-size:0.84rem;color:var(--text-secondary);display:flex;gap:0.5rem;">
-            <span style="color:var(--ecg-green);">●</span>
-            上傳包含<strong style="color:var(--text-primary);">「無明顯」或「normal」</strong>的檔案 → 顯示正常心電圖對照圖
-          </li>
-          <li style="font-size:0.84rem;color:var(--text-secondary);display:flex;gap:0.5rem;">
-            <span style="color:var(--text-muted);">●</span>
-            其他檔案 → 顯示判讀提示，供教學者現場說明
-          </li>
-        </ul>
-      </div>
-    </section>
-
-  </main>
-
-  <!-- 燈箱 Lightbox -->
-  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="圖片燈箱">
-    <div class="lightbox-inner">
-      <button class="lightbox-close" id="lightbox-close" aria-label="關閉燈箱">✕</button>
-      <img class="lightbox-img" id="lightbox-img" src="" alt="放大圖片">
+  <!-- Splash / Audio Unlock Screen -->
+  <div id="splash-screen" class="splash-overlay">
+    <div class="splash-logo" style="background: none; box-shadow: none; animation: logo-scale-pulse 2s infinite ease-in-out;">
+      <img src="d0c65ba4-4bd4-41bd-ab4d-e1063726e894.png" alt="Logo" style="width: 90px; height: 90px; border-radius: 24px; object-fit: contain;">
+    </div>
+    <h2 class="splash-title">救護助手</h2>
+    <p class="splash-subtitle">emergency</p>
+    <button id="btn-start-flow" class="start-btn" onclick="startApp()">啟動急救流程</button>
+    <div class="splash-footer">
+      <p>僅作急救輔助使用，不可用於販售之用途</p>
     </div>
   </div>
 
-  <script src="app.js" type="module"></script>
+  <!-- Main Application Container -->
+  <div class="app-container">
+    
+    <!-- Top iOS-styled Header -->
+    <header>
+      <div class="brand">
+        <div class="brand-icon" style="background: none; box-shadow: none;">
+          <img src="d0c65ba4-4bd4-41bd-ab4d-e1063726e894.png" alt="Logo" style="width: 32px; height: 32px; border-radius: 8px; display: block; object-fit: contain;">
+        </div>
+        <div class="brand-title">
+          <h1>救護助手</h1>
+          <span>跟著節奏動起來</span>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <button id="btn-mic-toggle" class="btn-mic-toggle" onclick="toggleSpeechRecognition()" title="啟動語音辨識">
+          <svg class="mic-icon" viewBox="0 0 24 24" fill="currentColor" style="width: 14px; height: 14px; display: block;">
+            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
+          </svg>
+          <span id="mic-status-text">語音：關</span>
+        </button>
+        <div id="connection-badge" style="font-size: 0.75rem; font-weight: 800; background: var(--ios-card-inner); padding: 4px 10px; border-radius: 20px; color: var(--color-red);">
+          On fire
+        </div>
+      </div>
+    </header>
+
+    <!-- Content Columns Grid -->
+    <main id="cpr-main-panel" class="main-grid">
+      
+      <!-- COLUMN 1: Metronome Panel -->
+      <section class="panel" id="cpr-metronome-card">
+        <div class="panel-header">
+          <span class="panel-title">節拍器</span>
+        </div>
+        
+        <!-- Circular Timing Progress Ring -->
+        <div class="timer-container">
+          <svg class="progress-ring" width="180" height="180">
+            <circle class="progress-ring-circle-bg" stroke="#2c2c2e" stroke-width="8" fill="transparent" r="78" cx="90" cy="90"/>
+            <circle id="timer-progress-ring" class="progress-ring-circle" stroke="#34c759" stroke-width="8" fill="transparent" r="78" cx="90" cy="90" stroke-dasharray="490" stroke-dashoffset="0"/>
+          </svg>
+          <div class="timer-content">
+            <div id="cpr-timer-readout" class="cpr-clock">02:00</div>
+            <div id="cpr-status-label" class="cpr-status">CPR 進行中</div>
+            <div id="cpr-breath-hint" class="cpr-counter">準備中...</div>
+          </div>
+        </div>
+
+        <!-- Metronome Control -->
+        <button id="btn-toggle-metronome" class="metro-toggle active" onclick="toggleMetronome()">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+          </svg>
+          <span>節拍器：開</span>
+        </button>
+
+        <!-- CPR Modes Grid -->
+        <div class="modes-grid">
+          <button id="mode-30-2" class="btn-mode active" onclick="setCPRMode('30:2')">30:2</button>
+          <button id="mode-15-2" class="btn-mode" onclick="setCPRMode('15:2')">15:2</button>
+          <button id="mode-cont" class="btn-mode" onclick="setCPRMode('CONT')">連續按壓</button>
+          <button id="mode-lucas" class="btn-mode" onclick="setCPRMode('LUCAS')">6秒給氧</button>
+        </div>
+
+        <!-- Shocks and Rhythm Selection -->
+        <div class="shocks-area">
+          <button class="btn-aed" onclick="triggerAEDShock()">AED 電擊</button>
+          <div class="manual-shock-row">
+            <select id="manual-joules-select" class="joule-select">
+              <option value="120">120J</option>
+              <option value="150">150J</option>
+              <option value="200" selected>200J</option>
+              <option value="270">270J</option>
+              <option value="360">360J</option>
+            </select>
+            <button class="btn-manual-shock" onclick="triggerManualShock()">手動電擊</button>
+          </div>
+          <select id="rhythm-select" class="ecg-select" onchange="logECGRhythm(this)">
+            <option value="" disabled selected>紀錄心律 (ECG Rhythm)</option>
+            <option value="VF">VF (心室纖維顫動)</option>
+            <option value="pVT">pVT (無脈搏性心室頻脈)</option>
+            <option value="Asystole">Asystole (心電停止)</option>
+            <option value="PEA">PEA (無脈搏電氣活動)</option>
+            <option value="NSR">NSR (正常竇性心律)</option>
+            <option value="SB">SB (竇性心緩)</option>
+            <option value="ST">ST (竇性心頻)</option>
+            <option value="SVT">SVT (心室上頻脈)</option>
+            <option value="VT">VT (心室頻脈)</option>
+            <option value="AFib">AFib (心房顫動)</option>
+            <option value="AFlutter">AFlutter (心房撲動)</option>
+            <option value="AVB">AVB (房室傳導阻滯)</option>
+            <option value="Others">Others (其他)</option>
+          </select>
+        </div>
+      </section>
+
+      <!-- COLUMN 2: Interventions & Meds -->
+      <section class="panel" id="cpr-meds-card">
+        <div class="panel-header">
+          <span class="panel-title">給藥 / 處置</span>
+        </div>
+
+        <!-- Tactile Epinephrine 1mg with Embedded Progress Bar -->
+        <div id="btn-epinephrine" class="epi-btn-container" onclick="administerEpinephrine()">
+          <div id="epi-progress-bar" class="epi-btn-progress"></div>
+          <div class="epi-btn-text-content">
+            <span class="epi-title">Epinephrine 1mg</span>
+            <span id="epi-timer-readout" class="epi-status">準備就緒</span>
+          </div>
+        </div>
+
+        <!-- Action Items Quick Grid -->
+        <div class="actions-grid">
+          <button class="btn-action" onclick="logAction('Amio 300mg', 'drug')">Amio 300mg</button>
+          <button class="btn-action" onclick="logAction('Amio 150mg', 'drug')">Amio 150mg</button>
+          <button class="btn-action" onclick="logAction('Lidocaine', 'drug')">Lidocaine</button>
+          <button class="btn-action" onclick="logAction('Atropine 1mg', 'drug')">Atropine 1mg</button>
+          <button class="btn-action" onclick="logAction('Adenosine', 'drug')">Adenosine</button>
+          <button class="btn-action" onclick="logAction('建立 IV/IO', 'drug')">建立 IV/IO</button>
+          
+          <button class="btn-action btn-action-primary" onclick="logAction('建立進階呼吸道 (Endo/LMA)', 'drug')">建立進階呼吸道 (Endo/LMA)</button>
+          <button class="btn-action" onclick="logAction('患者類別: OHCA', 'type')">OHCA</button>
+          <button class="btn-action" onclick="logAction('患者類別: IHCA', 'type')">IHCA</button>
+          
+          <!-- ROSC Button -->
+          <button id="btn-rosc-trigger" class="btn-action btn-rosc" onclick="triggerROSCState()">ROSC 恢復自發循環</button>
+        </div>
+      </section>
+
+      <!-- COLUMN 3: Global Timing & System Logging -->
+      <section class="panel logging-panel" id="cpr-logging-card">
+        <div class="panel-header">
+          <span class="panel-title">計時 / 紀錄</span>
+        </div>
+
+        <!-- Global Clock -->
+        <div id="global-timer-readout" class="global-clock">00:00:00</div>
+
+        <!-- Console Logging Stream -->
+        <div id="logs-container" class="log-stream">
+          <div class="log-entry">
+            <span class="log-time">--:--</span>
+            <span class="log-msg">系統待命...</span>
+          </div>
+        </div>
+
+        <!-- Bottom Controls -->
+        <div class="bottom-action-row">
+          <button class="btn-bottom" onclick="logAction('5H5T 評估', 'type')">5H5T</button>
+          <button class="btn-bottom" onclick="exportLogsToTxt()">匯出紀錄</button>
+          <button class="btn-bottom btn-stop-mission" onclick="endResuscitationMission()">結束任務</button>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+  
+  <!-- PWA Offline Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then((reg) => console.log('Service Worker Registered Successfully.', reg.scope))
+          .catch((err) => console.log('Service Worker Registration Failed:', err));
+      });
+    }
+  </script>
 </body>
 </html>

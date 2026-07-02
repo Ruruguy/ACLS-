@@ -1,1249 +1,651 @@
-// app.js – 12導程心電圖教學平台核心邏輯
-// 全部使用安全 DOM 操作，不使用 innerHTML 插入外部資料
+// Global Application State Variables
+let audioCtx = null;
+let globalTimerInterval = null;
+let cprTimerInterval = null;
+let metronomeInterval = null;
+let epinephrineInterval = null;
 
-// ═══════════════════════════════════════════════
-// 1. ECG 背景動態波形動畫
-// ═══════════════════════════════════════════════
-function initECGBackground() {
-  const canvas = document.getElementById('ecg-bg-canvas');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
+let startTime = null;
+let cprCountdownLeft = 120; // 2 minutes in seconds
+let activeCPRMode = '30:2'; // Default mode
+let metronomeBeatCount = 0;
+let isMetronomeRunning = true;
+let isBreathPaused = false;
+let screenWakeLock = null;
+let recognition = null;
+let isListening = false;
 
-  function resize() {
-    canvas.width  = window.innerWidth;
-    canvas.height = window.innerHeight;
-  }
-  resize();
-  window.addEventListener('resize', resize);
+// Circle Stroke Circumference
+const ringCircle = document.getElementById('timer-progress-ring');
+const ringRadius = ringCircle.r.baseVal.value;
+const ringCircumference = 2 * Math.PI * ringRadius; // ~490.088
+ringCircle.style.strokeDasharray = `${ringCircumference} ${ringCircumference}`;
+ringCircle.style.strokeDashoffset = 0;
 
-  // P-QRS-T 波形定義（歸一化 0→1 時間軸，-1→1 振幅軸）
-  const ecgWaveform = [
-    [0.00, 0.00], [0.04, 0.00],
-    [0.06, 0.15], [0.09, 0.00],  // P 波
-    [0.12, 0.00], [0.14,-0.05],  // PR 段
-    [0.15,-0.20],                 // Q 波
-    [0.17, 1.00],                 // R 波（峰值）
-    [0.19,-0.30],                 // S 波
-    [0.20, 0.00], [0.28, 0.00],  // ST 段
-    [0.30, 0.20], [0.40, 0.25], [0.50, 0.00], // T 波
-    [0.60, 0.00], [1.00, 0.00],  // TP 段
-  ];
-
-  let offset = 0;
-  const SPEED  = 0.4;  // px/frame
-  const ROWS   = 3;    // 幾行重複
-  const CYCLE  = 480;  // 像素/週期
-
-  function drawWave(yBase, amplitude) {
-    ctx.beginPath();
-    ctx.strokeStyle = '#00FF88';
-    ctx.lineWidth   = 1.5;
-
-    for (let px = 0; px < canvas.width + CYCLE; px += 1) {
-      const t    = ((px + offset) % CYCLE) / CYCLE;
-      let amp    = 0;
-
-      // 找對應波形插值
-      for (let i = 0; i < ecgWaveform.length - 1; i++) {
-        const [t0, a0] = ecgWaveform[i];
-        const [t1, a1] = ecgWaveform[i + 1];
-        if (t >= t0 && t <= t1) {
-          const ratio = (t - t0) / (t1 - t0);
-          amp = a0 + (a1 - a0) * ratio;
-          break;
-        }
-      }
-
-      const y = yBase - amp * amplitude;
-      if (px === 0) ctx.moveTo(px, y);
-      else          ctx.lineTo(px, y);
-    }
-    ctx.stroke();
-  }
-
-  function animate() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for (let r = 0; r < ROWS; r++) {
-      const yBase = (canvas.height / (ROWS + 1)) * (r + 1);
-      drawWave(yBase, 60 - r * 10);
-    }
-    offset = (offset + SPEED) % CYCLE;
-    requestAnimationFrame(animate);
-  }
-  animate();
-}
-
-// ═══════════════════════════════════════════════
-// 2. Tab 導覽切換
-// ═══════════════════════════════════════════════
-function initTabs() {
-  const tabBtns   = document.querySelectorAll('.tab-btn');
-  const tabPanels = document.querySelectorAll('.tab-panel');
-
-  tabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const target = btn.dataset.tab;
-
-      tabBtns.forEach(b => {
-        b.classList.remove('active');
-        b.setAttribute('aria-selected', 'false');
-      });
-      tabPanels.forEach(p => p.classList.remove('active'));
-
-      btn.classList.add('active');
-      btn.setAttribute('aria-selected', 'true');
-      document.getElementById(`panel-${target}`).classList.add('active');
-    });
-  });
-}
-
-// ═══════════════════════════════════════════════
-// 3. 基礎課程子 Tab
-// ═══════════════════════════════════════════════
-function initBasicsTabs() {
-  const btns   = document.querySelectorAll('.basics-tab-btn');
-  const panels = document.querySelectorAll('.basics-panel');
-
-  btns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      btns.forEach(b => b.classList.remove('active'));
-      panels.forEach(p => p.classList.remove('active'));
-      btn.classList.add('active');
-      document.getElementById(`basics-${btn.dataset.basics}`).classList.add('active');
-    });
-  });
-}
-
-// ═══════════════════════════════════════════════
-// 4. 12導程黏貼練習
-// ═══════════════════════════════════════════════
-// 正確電極位置（以圖片寬/高百分比表示，以 CPR 安妮正面圖為基準）
-// 病人右側在螢幕左邊，病人左側在螢幕右邊
-const CORRECT_POSITIONS = {
-  // 四肢導程：黏貼於鎖骨下窩或肢體近端非肌肉骨骼處（安妮正面解剖投影：螢幕左為病人右側，螢幕右為病人左側）
-  RA: { x: 0.25, y: 0.20 },  // 右鎖骨下窩 (螢幕左上)
-  LA: { x: 0.75, y: 0.20 },  // 左鎖骨下窩 (螢幕右上)
-  RL: { x: 0.30, y: 0.80 },  // 右下腹下肢近端 (螢幕左下)
-  LL: { x: 0.70, y: 0.80 },  // 左下腹下肢近端 (螢幕右下)
-
-  // 胸前導程：嚴格符合肋間解剖層次與水平軸線
-  V1: { x: 0.45, y: 0.42 },  // 胸骨右緣第4肋間 (螢幕中間偏左)
-  V2: { x: 0.55, y: 0.42 },  // 胸骨左緣第4肋間 (螢幕中間偏右)
-  V4: { x: 0.62, y: 0.53 },  // 左鎖骨中線第5肋間 (心尖部，解剖軸向左下延伸)
-  V3: { x: 0.58, y: 0.47 },  // V2 與 V4 的幾何與解剖連線中點
-  V5: { x: 0.70, y: 0.53 },  // 左前腋線，第5肋間水平 (與 V4 保持精準水平延伸)
-  V6: { x: 0.78, y: 0.53 },  // 左腋中線，第5肋間水平 (與 V4 保持精準水平延伸)
+// CPR Mode Parameters & Rules
+const CPR_MODES = {
+  '30:2': { limit: 30, type: 'ratio' },
+  '15:2': { limit: 15, type: 'ratio' },
+  'CONT': { limit: 0, type: 'cont' },
+  'LUCAS': { limit: 12, type: 'lucas' }, // Breath every 12 ticks (6s) at 120bpm
+  'ROSC': { limit: 0, type: 'rosc' }
 };
 
-// 初始散佈位置（將導極按螢幕左右側排列，方便拖曳不交錯）
-const INIT_POSITIONS = {
-  RA: { x: 0.15, y: 0.10 }, LA: { x: 0.85, y: 0.10 },
-  RL: { x: 0.15, y: 0.85 }, LL: { x: 0.85, y: 0.85 },
-  V1: { x: 0.15, y: 0.30 }, V2: { x: 0.85, y: 0.30 },
-  V3: { x: 0.85, y: 0.40 }, V4: { x: 0.85, y: 0.50 },
-  V5: { x: 0.85, y: 0.60 }, V6: { x: 0.85, y: 0.70 },
-};
-
-const LIMB_LEADS  = ['RA','LA','RL','LL'];
-const CHEST_LEADS = ['V1','V2','V3','V4','V5','V6'];
-let showingAnswer = false;
-
-function initLeadPractice() {
-  const zone      = document.getElementById('lead-drop-zone');
-  const torsoImg  = document.getElementById('torso-img');
-  const checkBtn  = document.getElementById('check-lead-btn');
-  const resetBtn  = document.getElementById('reset-lead-btn');
-  const feedback  = document.getElementById('lead-feedback');
-
-  if (!zone) return;
-
-  // 建立拖曳電極標籤
-  function createDots() {
-    zone.replaceChildren();
-    showingAnswer = false;
-    checkBtn.textContent = '✅ 顯示正確位置';
-
-    const allLeads = [...LIMB_LEADS, ...CHEST_LEADS];
-    allLeads.forEach(lead => {
-      const dot = document.createElement('div');
-      dot.className = `lead-dot ${LIMB_LEADS.includes(lead) ? 'limb' : 'chest'}`;
-      dot.textContent = lead;
-      dot.dataset.lead = lead;
-      dot.draggable = true;
-      dot.style.left = `${INIT_POSITIONS[lead].x * 100}%`;
-      dot.style.top  = `${INIT_POSITIONS[lead].y * 100}%`;
-      dot.setAttribute('aria-label', `${lead} 電極，可拖曳`);
-      zone.appendChild(dot);
-    });
+// === 1. Launch & Core Audio Hook ===
+function startApp() {
+  // Initialize Web Audio API on first user gesture (highly critical for Safari/iOS compatibility)
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  audioCtx = new AudioContextClass();
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
   }
-  createDots();
 
-  // Drag & Drop
-  let dragged = null;
-  zone.addEventListener('dragstart', e => {
-    if (e.target.classList.contains('lead-dot')) dragged = e.target;
-  });
-  zone.addEventListener('dragover', e => e.preventDefault());
-  zone.addEventListener('drop', e => {
-    if (!dragged || showingAnswer) return;
-    e.preventDefault();
-    const rect = zone.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top)  / rect.height;
-    dragged.style.left = `${Math.min(Math.max(x, 0.02), 0.98) * 100}%`;
-    dragged.style.top  = `${Math.min(Math.max(y, 0.02), 0.98) * 100}%`;
-    dragged = null;
-  });
+  // Hide Splash Screen overlay
+  document.getElementById('splash-screen').style.display = 'none';
 
-  // Touch drag support
-  zone.addEventListener('touchstart', e => {
-    const t = e.target;
-    if (t.classList.contains('lead-dot')) { dragged = t; e.preventDefault(); }
-  }, { passive: false });
-  zone.addEventListener('touchmove', e => {
-    if (!dragged || showingAnswer) return;
-    e.preventDefault();
-    const touch = e.touches[0];
-    const rect  = zone.getBoundingClientRect();
-    const x = (touch.clientX - rect.left) / rect.width;
-    const y = (touch.clientY - rect.top)  / rect.height;
-    dragged.style.left = `${Math.min(Math.max(x, 0.02), 0.98) * 100}%`;
-    dragged.style.top  = `${Math.min(Math.max(y, 0.02), 0.98) * 100}%`;
-  }, { passive: false });
-  zone.addEventListener('touchend', () => { dragged = null; });
+  // Record start time
+  startTime = new Date();
 
-  // 顯示/隱藏正確位置
-  checkBtn.addEventListener('click', () => {
-    showingAnswer = !showingAnswer;
-    const dots = zone.querySelectorAll('.lead-dot');
+  // Request WakeLock to keep screen on
+  requestScreenWakeLock();
 
-    if (showingAnswer) {
-      dots.forEach(dot => {
-        const lead = dot.dataset.lead;
-        const pos  = CORRECT_POSITIONS[lead];
-        dot.style.left = `${pos.x * 100}%`;
-        dot.style.top  = `${pos.y * 100}%`;
-        dot.classList.add('correct-pos');
-      });
-      checkBtn.textContent = '🙈 隱藏答案';
-      feedback.textContent = '✅ 這是各電極的正確位置，請仔細觀察與記憶。';
-      feedback.style.display = 'block';
-    } else {
-      dots.forEach(dot => dot.classList.remove('correct-pos'));
-      createDots();
-      feedback.style.display = 'none';
+  // Start Global Timer & CPR 2-minute Cycle Countdown
+  globalTimerInterval = setInterval(updateGlobalStopwatch, 1000);
+  startCPRCycleTimer();
+
+  // Start Metronome
+  startMetronomeTickLoop();
+
+  // Log initial action
+  logAction('急救開始', 'rosc');
+
+  // Auto-start Speech Recognition
+  if (!recognition) {
+    initSpeechRecognition();
+  }
+  if (recognition && !isListening) {
+    isListening = true;
+    try {
+      recognition.start();
+    } catch (e) {
+      console.error("Auto-start speech recognition error:", e);
     }
-  });
-
-  resetBtn.addEventListener('click', () => {
-    createDots();
-    feedback.style.display = 'none';
-  });
-}
-
-// ═══════════════════════════════════════════════
-// 5. 教學實拍照片畫廊
-// ═══════════════════════════════════════════════
-function initPhotoGallery() {
-  const gallery  = document.getElementById('photo-gallery');
-  const lightbox = document.getElementById('lightbox');
-  const lbImg    = document.getElementById('lightbox-img');
-  const lbClose  = document.getElementById('lightbox-close');
-
-  if (!gallery) return;
-
-  // 選取有代表性的圖片（使用較大尺寸者）
-  const photoNums = [7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19];
-  photoNums.forEach(n => {
-    const num  = String(n).padStart(2, '0');
-    const src  = `12導程貼圖照片/LINE_ALBUM_救護平板EKG傳輸照片_260612_${n}.jpg`;
-    const img  = document.createElement('img');
-    img.className   = 'gallery-photo';
-    img.src         = src;
-    img.alt         = `12導程教學示範圖 ${num}`;
-    img.loading     = 'lazy';
-    img.addEventListener('click', () => {
-      lbImg.src = src;
-      lbImg.alt = `12導程教學示範圖 ${num}（放大）`;
-      lightbox.classList.add('open');
-    });
-    gallery.appendChild(img);
-  });
-
-  // 關閉燈箱
-  function closeLightbox() {
-    lightbox.classList.remove('open');
-    lbImg.src = '';
-  }
-  lbClose.addEventListener('click', closeLightbox);
-  lightbox.addEventListener('click', e => { if (e.target === lightbox) closeLightbox(); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
-}
-
-// ═══════════════════════════════════════════════
-// 6. 判讀測驗（10 題）
-// ═══════════════════════════════════════════════
-const QUIZ_DATA = [
-  {
-    q: '下列哪一項最能代表「STEMI」的典型心電圖表現？',
-    choices: ['ST 段抬高 ≥ 2mm 出現在 V2–V4', 'T 波倒置出現在 aVR', 'PR 段延長 > 0.20 秒', 'QRS 波寬度 > 0.12 秒'],
-    a: 0,
-    expl: '前壁 STEMI 的典型表現是 V2–V4 導程出現 ST 段顯著抬高（男性 ≥ 2mm，女性 ≥ 1.5mm），代表 LAD 動脈阻塞。',
-  },
-  {
-    q: '心室頻脈（VT）在心電圖上最常見的特徵是？',
-    choices: ['QRS 寬 ≥ 0.12 秒、心率 > 100 bpm', '窄 QRS、規則節律、心率 150 bpm', 'PR 間期 > 0.20 秒', '多形性 P 波'],
-    a: 0,
-    expl: 'VT 源自心室，電氣傳導走旁路，因此 QRS 寬而怪異（≥ 0.12 秒），心率通常超過 100 bpm（多為 150–200 bpm）。',
-  },
-  {
-    q: '正常竇性心律（Normal Sinus Rhythm）的 PR 間期範圍為？',
-    choices: ['0.12–0.20 秒', '0.06–0.10 秒', '0.20–0.28 秒', '< 0.10 秒'],
-    a: 0,
-    expl: 'PR 間期代表電氣從竇房結傳至心室的時間。正常範圍為 0.12–0.20 秒（心電圖紙上為 3–5 小格）。',
-  },
-  {
-    q: '心電圖顯示 II、III、aVF 導程 ST 段抬高，最可能為哪個部位的心肌梗塞？',
-    choices: ['下壁心肌梗塞（右冠狀動脈供應區）', '前壁心肌梗塞（LAD 供應區）', '側壁心肌梗塞（LCx 供應區）', '後壁心肌梗塞'],
-    a: 0,
-    expl: 'II、III、aVF 是觀察心臟下壁的導程，ST 抬高代表下壁 STEMI，通常由右冠狀動脈（RCA）阻塞引起。',
-  },
-  {
-    q: '心室顫動（VF）在心電圖上的外觀最像什麼？',
-    choices: ['完全不規則的混亂波形，無法辨識 QRS', '規則且迅速的寬 QRS 波', '細小且規律的鋸齒波', 'P 波消失但 QRS 規則'],
-    a: 0,
-    expl: 'VF 是最致命的心律不整，心電圖表現為雜亂無章的高低頻波形，完全無法辨識 P 波、QRS 或 T 波，需立即去顫。',
-  },
-  {
-    q: '心房顫動（Atrial Fibrillation, AF）的典型特徵為？',
-    choices: ['R-R 間距不規則，P 波消失，代之以細小顫動波', '規則心率、P 波清晰、QRS 寬', 'ST 段抬高、Q 波加深', 'PR 間期逐漸延長直到 QRS 脫落'],
-    a: 0,
-    expl: 'AF 最重要的診斷依據是 R-R 絕對不規則 + P 波消失（代之以 f 波，約 350–600 次/分），QRS 通常正常寬度。',
-  },
-  {
-    q: '一度房室傳導阻滯（1st degree AV block）定義為？',
-    choices: ['PR 間期固定延長 > 0.20 秒', 'PR 間期逐漸延長直到 QRS 脫落', '部分 P 波後沒有 QRS', 'P 波與 QRS 完全無關'],
-    a: 0,
-    expl: '一度 AV block 的 PR 間期固定（每次都一樣），但延長超過 0.20 秒（5 小格），代表房室結傳導速度減慢。通常屬良性，本身不需特殊處置。',
-  },
-  {
-    q: '胸前電極 V1 的正確黏貼位置是？',
-    choices: ['胸骨右緣第 4 肋間', '胸骨左緣第 4 肋間', '左鎖骨中線第 5 肋間', '左前腋線，與 V4 同水平'],
-    a: 0,
-    expl: 'V1 位於胸骨右緣第 4 肋間，V2 在胸骨左緣第 4 肋間。V1 和 V2 對稱排列，是胸前導程的定位錨點，位置錯誤會嚴重影響判讀品質。',
-  },
-  {
-    q: '有脈搏的心室頻脈（Stable VT）院前首選處置為？',
-    choices: ['評估血流動力學穩定性；若不穩定，施予同步整流', '立即 200J 非同步去顫', '給予 Atropine 0.5mg 靜脈注射', '立即進行胸外按壓'],
-    a: 0,
-    expl: '有脈 VT 需先評估是否血流動力學穩定。若不穩定（低血壓、意識改變），優先同步整流（synchronized cardioversion）100–200J；穩定者可考慮 Amiodarone 藥物治療。',
-  },
-  {
-    q: '下列哪一個「不是」正常竇性心律的診斷標準？',
-    choices: ['QRS 寬度 > 0.12 秒', '心率 60–100 次/分', '每個 QRS 前均有 P 波', 'PR 間期 0.12–0.20 秒'],
-    a: 0,
-    expl: 'QRS 寬度正常應 ≤ 0.12 秒（3 小格）。若 QRS > 0.12 秒，可能代表束支傳導阻滯（BBB）或心室傳導異常，不符合正常竇性心律。',
-  },
-];
-
-let currentQ     = 0;
-let score        = 0;
-let answered     = new Array(QUIZ_DATA.length).fill(null); // null=未答, true/false=結果
-let quizFinished = false;
-
-function initQuiz() {
-  renderQuestion(0);
-  document.getElementById('quiz-prev-btn').addEventListener('click', () => {
-    if (currentQ > 0) { currentQ--; renderQuestion(currentQ); }
-  });
-  document.getElementById('quiz-next-btn').addEventListener('click', () => {
-    if (currentQ < QUIZ_DATA.length - 1) { currentQ++; renderQuestion(currentQ); }
-    else showScoreBoard();
-  });
-  document.getElementById('quiz-restart-btn').addEventListener('click', restartQuiz);
-  document.getElementById('quiz-review-btn').addEventListener('click', showReview);
-}
-
-function renderQuestion(idx) {
-  const item  = QUIZ_DATA[idx];
-  const area  = document.getElementById('quiz-question-area');
-  area.replaceChildren();
-
-  // 卡片
-  const card = document.createElement('div');
-  card.className = 'quiz-card';
-
-  const numDiv = document.createElement('div');
-  numDiv.className = 'quiz-number';
-  numDiv.textContent = `題目 ${idx + 1} / ${QUIZ_DATA.length}`;
-  card.appendChild(numDiv);
-
-  const qDiv = document.createElement('div');
-  qDiv.className = 'quiz-question';
-  qDiv.textContent = item.q;
-  card.appendChild(qDiv);
-
-  const choicesDiv = document.createElement('div');
-  choicesDiv.className = 'quiz-choices';
-
-  const LABELS = ['A', 'B', 'C', 'D'];
-  item.choices.forEach((choice, ci) => {
-    const btn = document.createElement('button');
-    btn.className = 'choice-btn';
-    btn.id = `choice-${idx}-${ci}`;
-
-    const label = document.createElement('span');
-    label.className = 'choice-label';
-    label.textContent = LABELS[ci];
-    btn.appendChild(label);
-
-    const text = document.createElement('span');
-    text.textContent = choice;
-    btn.appendChild(text);
-
-    // 如果已答過，恢復狀態
-    if (answered[idx] !== null) {
-      btn.disabled = true;
-      if (ci === item.a)         btn.classList.add('correct');
-      else if (ci === answered[idx] && answered[idx] !== item.a) btn.classList.add('wrong');
-    }
-
-    btn.addEventListener('click', () => handleAnswer(idx, ci, card));
-    choicesDiv.appendChild(btn);
-  });
-  card.appendChild(choicesDiv);
-
-  // 解析區
-  const expl = document.createElement('div');
-  expl.className = 'quiz-explanation';
-  expl.id = `expl-${idx}`;
-  expl.textContent = `📖 解析：${item.expl}`;
-  if (answered[idx] !== null) expl.classList.add('show');
-  card.appendChild(expl);
-
-  area.appendChild(card);
-
-  // 更新進度條
-  updateProgress(idx);
-}
-
-function handleAnswer(qIdx, choiceIdx, card) {
-  if (answered[qIdx] !== null) return;
-  answered[qIdx] = choiceIdx;
-  const item   = QUIZ_DATA[qIdx];
-  const isCorr = choiceIdx === item.a;
-  if (isCorr) score++;
-
-  // 更新按鈕外觀
-  const buttons = card.querySelectorAll('.choice-btn');
-  buttons.forEach((btn, ci) => {
-    btn.disabled = true;
-    if (ci === item.a)  btn.classList.add('correct');
-    if (ci === choiceIdx && !isCorr) btn.classList.add('wrong');
-  });
-
-  // 顯示解析
-  document.getElementById(`expl-${qIdx}`).classList.add('show');
-
-  // 啟用下一題按鈕
-  const nextBtn = document.getElementById('quiz-next-btn');
-  nextBtn.disabled = false;
-  if (qIdx === QUIZ_DATA.length - 1) {
-    nextBtn.textContent = '查看成績 →';
-  }
-
-  updateProgress(qIdx);
-  document.getElementById('quiz-score-text').textContent = `得分：${score}`;
-}
-
-function updateProgress(idx) {
-  const fill    = document.getElementById('quiz-progress-fill');
-  const text    = document.getElementById('quiz-progress-text');
-  const prevBtn = document.getElementById('quiz-prev-btn');
-  const nextBtn = document.getElementById('quiz-next-btn');
-
-  const pct = ((idx + 1) / QUIZ_DATA.length) * 100;
-  fill.style.width = `${pct}%`;
-  text.textContent = `第 ${idx + 1} 題 / 共 ${QUIZ_DATA.length} 題`;
-
-  prevBtn.disabled = idx === 0;
-  if (!quizFinished) {
-    nextBtn.disabled = answered[idx] === null;
-    nextBtn.textContent = idx === QUIZ_DATA.length - 1 ? '查看成績 →' : '下一題 →';
   }
 }
 
-function showScoreBoard() {
-  quizFinished = true;
-  document.getElementById('quiz-question-area').style.display = 'none';
-  document.getElementById('quiz-nav').style.display = 'none';
-  document.getElementById('quiz-progress-wrap').style.display = 'none';
-
-  const board = document.getElementById('quiz-score-board');
-  board.style.display = 'block';
-  document.getElementById('score-num').textContent = score;
-
-  const pct = score / QUIZ_DATA.length;
-  let msg, detail;
-  if (pct >= 0.9) {
-    msg = '🏆 優秀！心電圖判讀達人！';
-    detail = '你對心電圖的理解非常深入，繼續保持！';
-    document.getElementById('score-circle').style.borderColor = 'var(--ecg-green)';
-  } else if (pct >= 0.7) {
-    msg = '👍 不錯！再複習幾個重點';
-    detail = '大部分題目都掌握了，可回顧答錯的題目加強。';
-    document.getElementById('score-circle').style.borderColor = 'var(--ecg-blue)';
-  } else if (pct >= 0.5) {
-    msg = '📚 繼續加油！';
-    detail = '建議回到「基礎課程」模組複習，再來挑戰一次。';
-    document.getElementById('score-circle').style.borderColor = 'var(--ecg-yellow)';
-  } else {
-    msg = '💪 加油！別灰心，多練習就好';
-    detail = '心電圖判讀需要反覆練習，從基礎課程開始吧！';
-    document.getElementById('score-circle').style.borderColor = 'var(--ecg-red)';
+// Speech Synthesis (TTS) Helper
+function speakText(text) {
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'zh-TW';
+    utterance.rate = 1.0;
+    window.speechSynthesis.speak(utterance);
   }
-  document.getElementById('score-msg').textContent    = msg;
-  document.getElementById('score-detail').textContent = detail;
 }
 
-function restartQuiz() {
-  score        = 0;
-  currentQ     = 0;
-  answered     = new Array(QUIZ_DATA.length).fill(null);
-  quizFinished = false;
-
-  document.getElementById('quiz-score-board').style.display  = 'none';
-  document.getElementById('quiz-review-area').style.display  = 'none';
-  document.getElementById('quiz-question-area').style.display = '';
-  document.getElementById('quiz-nav').style.display          = '';
-  document.getElementById('quiz-progress-wrap').style.display = '';
-  document.getElementById('quiz-score-text').textContent     = '得分：0';
-
-  renderQuestion(0);
-}
-
-function showReview() {
-  const reviewArea = document.getElementById('quiz-review-area');
-  reviewArea.style.display = 'block';
-  reviewArea.replaceChildren();
-
-  const title = document.createElement('h3');
-  title.textContent = '📋 全部題目解析';
-  title.style.cssText = 'color:var(--text-primary);font-size:1rem;margin-bottom:1rem;';
-  reviewArea.appendChild(title);
-
-  QUIZ_DATA.forEach((item, idx) => {
-    const card = document.createElement('div');
-    card.className = 'quiz-card';
-    card.style.marginBottom = '1rem';
-
-    const isCorr = answered[idx] === item.a;
-    const tag = document.createElement('div');
-    tag.style.cssText = `font-size:0.72rem;font-weight:700;margin-bottom:0.3rem;color:${isCorr ? 'var(--ecg-green)' : 'var(--ecg-red)'};`;
-    tag.textContent = `題目 ${idx + 1} — ${isCorr ? '✅ 正確' : '✖ 答錯'}`;
-    card.appendChild(tag);
-
-    const q = document.createElement('div');
-    q.style.cssText = 'font-size:0.88rem;font-weight:600;color:var(--text-primary);margin-bottom:0.5rem;';
-    q.textContent = item.q;
-    card.appendChild(q);
-
-    const ansDiv = document.createElement('div');
-    ansDiv.style.cssText = 'font-size:0.82rem;color:var(--ecg-green);margin-bottom:0.4rem;';
-    ansDiv.textContent = `✔ 正確答案：${item.choices[item.a]}`;
-    card.appendChild(ansDiv);
-
-    const expl = document.createElement('div');
-    expl.style.cssText = 'font-size:0.8rem;color:var(--text-secondary);';
-    expl.textContent = `📖 ${item.expl}`;
-    card.appendChild(expl);
-
-    reviewArea.appendChild(card);
-  });
-
-  reviewArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-// ═══════════════════════════════════════════════
-// 7. 上傳分析
-// ═══════════════════════════════════════════════
-function initUploadAnalysis() {
-  const zone      = document.getElementById('upload-zone');
-  const input     = document.getElementById('ecg-file-input');
-  const canvas    = document.getElementById('ecg-canvas-preview');
-  const analyzeBtn = document.getElementById('analyze-btn');
-  const result    = document.getElementById('analysis-result');
-  const resultTitle = document.getElementById('result-title');
-  const resultBody  = document.getElementById('result-body');
-  const resultImg   = document.getElementById('result-ref-img');
-
-  if (!zone) return;
-  let uploadedFile = null;
-
-  // 拖曳高亮
-  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
-  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
-  zone.addEventListener('drop', e => {
-    e.preventDefault();
-    zone.classList.remove('drag-over');
-    const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) loadFile(file);
-  });
-
-  input.addEventListener('change', e => {
-    const file = e.target.files[0];
-    if (file) loadFile(file);
-  });
-
-  function loadFile(file) {
-    uploadedFile = file;
-    const img = new Image();
-    img.onload = () => {
-      canvas.width  = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      canvas.style.display = 'block';
-      canvas.getContext('2d').drawImage(img, 0, 0);
-      URL.revokeObjectURL(img.src);
-    };
-    img.src = URL.createObjectURL(file);
-    result.style.display = 'none';
+// Speech Recognition Helpers
+function initSpeechRecognition() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    console.warn("Speech recognition is not supported in this browser.");
+    return;
   }
-
-  analyzeBtn.addEventListener('click', () => {
-    if (!uploadedFile) {
-      alert('請先上傳心電圖圖檔！');
-      return;
-    }
-    const fn = uploadedFile.name.toLowerCase();
-
-    result.style.display = 'block';
-    // 清除舊 class
-    result.classList.remove('stemi', 'vt', 'normal');
-    resultImg.style.display = 'none';
-
-    if (fn.includes('stemi')) {
-      result.classList.add('stemi');
-      resultTitle.className = 'result-title stemi';
-      resultTitle.textContent = '🔴 判讀結果：疑似 STEMI（ST 段抬高型心肌梗塞）';
-      resultBody.textContent = '偵測到 STEMI 典型特徵：建議立即確認 II、III、aVF 或 V2–V4 導程，測量 ST 段抬高幅度，啟動急性冠狀動脈症候群（ACS）院前流程，提前通報醫院。';
-      resultImg.src  = 'Stemi.png';
-      resultImg.alt  = 'STEMI 心電圖參考圖';
-      resultImg.style.display = 'block';
-    } else if (fn.includes('vt')) {
-      result.classList.add('vt');
-      resultTitle.className = 'result-title vt';
-      resultTitle.textContent = '🟡 判讀結果：疑似 VT（心室頻脈）';
-      resultBody.textContent = '偵測到 VT 典型特徵：QRS 寬（≥0.12s）、心率快。請評估患者是否有脈搏及血流動力學穩定性，視情況施予同步整流或藥物治療。';
-      resultImg.src  = 'VT.png';
-      resultImg.alt  = 'VT 心電圖參考圖';
-      resultImg.style.display = 'block';
-    } else if (fn.includes('無明顯') || fn.includes('normal')) {
-      result.classList.add('normal');
-      resultTitle.className = 'result-title normal';
-      resultTitle.textContent = '🟢 判讀結果：無明顯危急心律特徵';
-      resultBody.textContent = '未偵測到 STEMI 或 VT 典型特徵。仍建議結合臨床症狀（胸痛、意識改變、血壓數值）進行全面評估，切勿單獨依賴心電圖。';
-      resultImg.src  = '無明顯.png';
-      resultImg.alt  = '正常心電圖參考圖';
-      resultImg.style.display = 'block';
-    } else {
-      result.classList.add('normal');
-      resultTitle.className = 'result-title';
-      resultTitle.style.color = 'var(--text-secondary)';
-      resultTitle.textContent = '⚙️ 判讀提示：請由教學者說明';
-      resultBody.textContent = `已載入檔案「${uploadedFile.name}」。建議教學者現場引導學員進行系統化判讀：① 心率 → ② 節律 → ③ P波 → ④ PR間期 → ⑤ QRS寬度 → ⑥ ST段 → ⑦ T波。`;
-    }
-  });
-}
-
-// ═══════════════════════════════════════════════
-// 8. 心律判讀練習模組
-// ═══════════════════════════════════════════════
-
-// 八種心律的醫學波形定義（歸一化 0→1 時間，-1→1 振幅）
-const RHYTHM_DEFS = {
-  nsr: {
-    name: '正常竇性心律（Normal Sinus Rhythm）',
-    rate: 75,
-    color: '#00FF88',
-    info: {
-      title: '🟢 正常竇性心律',
-      criteria: ['心率 60–100 次/分，節律規則','每個 QRS 前有 P 波，形態一致','PR 間期 0.12–0.20 秒（3–5 小格）','QRS 寬度 ≤ 0.12 秒（3 小格以內）','ST 段貼近基線，T 波直立（aVR 除外）'],
-      action: '✅ 正常心律不代表無危急病況，仍須結合臨床症狀（胸痛、意識改變、血壓異常）整體評估。'
-    }
-  },
-  svt: {
-    name: '上心室頻脈（SVT）',
-    rate: 170,
-    color: '#FFD166',
-    info: {
-      title: '🟡 上心室頻脈（SVT）',
-      criteria: ['心率 150–250 次/分，節律極規則','P 波常埋入 T 波或不可見','QRS 窄（≤ 0.12 秒）','突發突止為典型特徵','最常見：AVNRT（房室結折返性頻脈）'],
-      action: '⚠️ 院前處置：嘗試迷走神經刺激（Valsalva）；若血流動力學不穩定，立即同步整流 50–100J。'
-    }
-  },
-  af: {
-    name: '心房顫動（Atrial Fibrillation）',
-    rate: 110,
-    color: '#06B6D4',
-    info: {
-      title: '🔵 心房顫動（AF）',
-      criteria: ['P 波消失，代之以不規則細小 f 波（350–600 次/分）','R-R 間距完全不規則（絕對不整脈）','QRS 通常正常寬度（≤ 0.12 秒）','心室率視房室結傳導而異（通常 60–150 次/分）','慢性 AF 可能合併心衰竭、腦梗塞風險'],
-      action: '⚠️ 院前評估：心率控制 vs. 節律控制。若合併急性血流動力學不穩定，考慮同步整流；長期 AF 需評估抗凝治療風險。'
-    }
-  },
-  vt: {
-    name: '心室頻脈（Ventricular Tachycardia）',
-    rate: 160,
-    color: '#FF4E6A',
-    info: {
-      title: '🔴 心室頻脈（VT）',
-      criteria: ['心率 100–250 次/分（多為 150–200 bpm）','QRS 寬且怪異（≥ 0.12 秒），形態異常','通常無正常 P 波，或 P 波與 QRS 無關（房室分離）','節律多半規則','可能伴隨或退化為心室顫動（VF）'],
-      action: '🚨 院前處置：有脈→評估穩定性→若不穩定立即同步整流 100–200J；無脈 VT＝VF 處置→立即非同步去顫 200J（雙相）。'
-    }
-  },
-  vf: {
-    name: '心室顫動（Ventricular Fibrillation）',
-    rate: 0,
-    color: '#FF4E6A',
-    info: {
-      title: '⚫ 心室顫動（VF）',
-      criteria: ['完全混亂、不規則、無法辨識的波形','無 P 波、無 QRS、無 T 波','振幅高低不一（粗 VF vs. 細 VF）','心臟無有效排血 → 無脈搏 → 心跳停止'],
-      action: '🚨 立即處置：CPR + 最短時間非同步去顫 200J（雙相）。每 2 分鐘換人 CPR，盡量縮短按壓中斷。這是最緊急的心律。'
-    }
-  },
-  sb: {
-    name: '竇性心搏過緩（Sinus Bradycardia）',
-    rate: 40,
-    color: '#7CD4FD',
-    info: {
-      title: '🩵 竇性心搏過緩（Sinus Bradycardia）',
-      criteria: ['心率 < 60 次/分','P 波正常，每個 QRS 前均有 P 波','PR 間期、QRS 寬度均正常','TP 段延長（兩次心跳間距變長）'],
-      action: '⚠️ 症狀性緩脈（低血壓、意識改變）處置：Atropine 0.5mg 靜脈注射（可重複至 3mg）；無效考慮體外節律器（Transcutaneous Pacing）。'
-    }
-  },
-  avb3: {
-    name: '三度房室傳導阻滯（Complete AV Block）',
-    rate: 35,
-    color: '#FB923C',
-    info: {
-      title: '🟠 三度房室傳導阻滯（Complete AV Block）',
-      criteria: ['P 波規則出現（心房率 60–100 次/分）','QRS 完全與 P 波無關（房室分離）','心室靠逸搏節律維持（30–45 bpm），QRS 可能寬','P 波可能落在 QRS 前、中、後，PR 間期不固定','為最嚴重的房室傳導阻滯'],
-      action: '🚨 緊急處置：Atropine 通常無效；立即準備體外節律器（TCP），考慮 Dopamine/Epinephrine 維持血壓，準備永久心律器植入。'
-    }
-  },
-  pea: {
-    name: '無脈性電氣活動（PEA）',
-    rate: 55,
-    color: '#A78BFA',
-    info: {
-      title: '🔵 無脈性電氣活動（PEA）',
-      criteria: ['心電圖可見任何有組織的心律（常見竇性或寬QRS）','但臨床上：觸摸不到脈搏','屬心跳停止的一型，需立即 CPR','常見可逆原因（4H4T）：低血容、低血氧、張力性氣胸、心包填塞…'],
-      action: '🚨 立即 CPR！尋找並處置可逆原因（4H4T）：Hypovolemia, Hypoxia, Hypothermia, H⁺（酸中毒）, Tension pneumothorax, Tamponade, Toxins, Thrombosis。'
-    }
-  }
-};
-
-// 挑戰模式題庫
-const CHALLENGE_POOL = [
-  { rhythm: 'nsr', distractors: ['svt','af','sb'] },
-  { rhythm: 'svt', distractors: ['nsr','vt','af'] },
-  { rhythm: 'af',  distractors: ['nsr','svt','avb3'] },
-  { rhythm: 'vt',  distractors: ['vf','svt','nsr'] },
-  { rhythm: 'vf',  distractors: ['vt','af','pea'] },
-  { rhythm: 'sb',  distractors: ['avb3','nsr','pea'] },
-  { rhythm: 'avb3',distractors: ['sb','af','pea'] },
-  { rhythm: 'pea', distractors: ['nsr','sb','vt'] },
-];
-
-function initPractice() {
-  const canvas       = document.getElementById('practice-ecg-canvas');
-  if (!canvas) return;
-  const ctx          = canvas.getContext('2d');
-
-  // UI 元素
-  const rateDisplay      = document.getElementById('practice-rate-display');
-  const rhythmDisplay    = document.getElementById('practice-rhythm-display');
-  const rhythmSelector   = document.getElementById('practice-rhythm-selector');
-  const infoCard         = document.getElementById('practice-info-card');
-  const infoTitle        = document.getElementById('practice-info-title');
-  const infoList         = document.getElementById('practice-info-list');
-  const infoAction       = document.getElementById('practice-info-action');
-  const challengeArea    = document.getElementById('practice-challenge-area');
-  const challengeChoices = document.getElementById('practice-challenge-choices');
-  const challengeResult  = document.getElementById('practice-challenge-result');
-  const challengeNext    = document.getElementById('practice-challenge-next');
-  const scoreDisplay     = document.getElementById('practice-score-display');
-  const learnBtn         = document.getElementById('practice-mode-learn');
-  const challengeBtn     = document.getElementById('practice-mode-challenge');
-
-  // 狀態
-  let currentRhythm = 'nsr';
-  let practiceMode  = 'learn';  // 'learn' | 'challenge'
-  let animId        = null;
-  let offset        = 0;
-  let challengeScore = 0;
-  let challengeTotal = 0;
-  let challengeQueue = [];
-  let challengeCurrent = null;
-  let challengeAnswered = false;
-
-  // 畫布尺寸
-  function resizeCanvas() {
-    const wrap = canvas.parentElement;
-    canvas.width  = wrap.clientWidth || 700;
-    canvas.height = Math.min(220, window.innerHeight * 0.25);
-  }
-  resizeCanvas();
-  window.addEventListener('resize', () => { resizeCanvas(); });
-
-  // ─── 醫學級電生理：平滑動態心電圖波形生成器 (Lead II 特徵) ───────────────────
   
-  // 1. 正常竇性心律 (NSR): P正、R高尖、T正
-  function getNormalBeat(t) {
-    let val = 0;
-    // P 波：心房除極，Lead II 必定正向平滑
-    if (t >= 0.05 && t <= 0.13) {
-      val += 0.15 * Math.sin(Math.PI * (t - 0.05) / 0.08);
-    }
-    // Q 波：短暫負向
-    if (t >= 0.16 && t <= 0.18) {
-      val -= 0.05 * Math.sin(Math.PI * (t - 0.16) / 0.02);
-    }
-    // R 波：心室主要除極，Lead II 為高尖正向波
-    if (t > 0.18 && t <= 0.21) {
-      if (t <= 0.195) {
-        val += 1.0 * (t - 0.18) / 0.015;
-      } else {
-        val += 1.0 * (0.21 - t) / 0.015;
+  recognition = new SpeechRecognition();
+  recognition.continuous = true;
+  recognition.interimResults = false;
+  recognition.lang = 'zh-TW';
+  
+  recognition.onstart = () => {
+    isListening = true;
+    updateMicUI(true);
+  };
+  
+  recognition.onerror = (event) => {
+    console.error("Speech recognition error:", event.error);
+    if (isListening && event.error !== 'not-allowed') {
+      try {
+        recognition.start();
+      } catch (e) {
+        console.error("Failed to restart speech recognition:", e);
       }
+    } else {
+      isListening = false;
+      updateMicUI(false);
     }
-    // S 波：心室基底部除極，顯著向下凹陷
-    if (t > 0.21 && t <= 0.24) {
-      if (t <= 0.222) {
-        val -= 0.25 * (t - 0.21) / 0.012;
-      } else {
-        val -= 0.25 * (0.24 - t) / 0.018;
+  };
+  
+  recognition.onend = () => {
+    if (isListening) {
+      try {
+        recognition.start();
+      } catch (e) {
+        console.error("Error restarting recognition on end:", e);
       }
+    } else {
+      updateMicUI(false);
     }
-    // T 波：心室復極，與主波方向一致（正向平滑寬波）
-    if (t >= 0.32 && t <= 0.50) {
-      val += 0.25 * Math.sin(Math.PI * (t - 0.32) / 0.18);
-    }
-    return val;
-  }
+  };
+  
+  recognition.onresult = (event) => {
+    const resultIndex = event.resultIndex;
+    const transcript = event.results[resultIndex][0].transcript.trim();
+    console.log("Speech recognized:", transcript);
+    processSpeechTranscript(transcript);
+  };
+}
 
-  // 2. 窄 QRS 無 P 波模型 (用於 AF 心室波)
-  function getNormalBeatNoP(t) {
-    let val = 0;
-    if (t >= 0.02 && t <= 0.04) val -= 0.05 * Math.sin(Math.PI * (t - 0.02) / 0.02);
-    if (t > 0.04 && t <= 0.07) {
-      if (t <= 0.055) val += 0.9 * (t - 0.04) / 0.015;
-      else val += 0.9 * (0.07 - t) / 0.015;
-    }
-    if (t > 0.07 && t <= 0.10) {
-      if (t <= 0.082) val -= 0.2 * (t - 0.07) / 0.012;
-      else val -= 0.2 * (0.10 - t) / 0.018;
-    }
-    if (t >= 0.18 && t <= 0.36) {
-      val += 0.23 * Math.sin(Math.PI * (t - 0.18) / 0.18);
-    }
-    return val;
+function toggleSpeechRecognition() {
+  if (!recognition) {
+    initSpeechRecognition();
   }
-
-  // 3. 畸形寬大 QRS 模型 (用於 3° AVB 的心室自搏心律)
-  function getWideQRS(t) {
-    let val = 0;
-    // 傳導阻滯導致除極變慢：QRS 寬大且有切跡 (Notch)
-    if (t >= 0.0 && t <= 0.25) {
-      val += 0.75 * Math.sin(Math.PI * t / 0.25);
-      val += 0.18 * Math.sin(3 * Math.PI * t / 0.25); // 電氣切跡
-    }
-    // ST-T 繼發性改變：T波方向通常與 QRS 主波相反 (Discordant T)
-    if (t > 0.25 && t <= 0.85) {
-      val -= 0.28 * Math.sin(Math.PI * (t - 0.25) / 0.60);
-    }
-    return val;
+  if (!recognition) {
+    alert("您的瀏覽器不支援語音辨識功能。");
+    return;
   }
-
-  // 4. 竇性節律觸發器
-  function getSinusBeat(x_abs, cyclePx, activePx) {
-    const x_mod = ((x_abs % cyclePx) + cyclePx) % cyclePx;
-    if (x_mod < activePx) {
-      return getNormalBeat(x_mod / activePx);
+  
+  if (isListening) {
+    isListening = false;
+    recognition.stop();
+  } else {
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume();
     }
-    return 0;
+    isListening = true;
+    try {
+      recognition.start();
+    } catch (e) {
+      console.error("Speech recognition start error:", e);
+    }
   }
+}
 
-  // 5. 上心室頻脈 (SVT): 極速、窄QRS、P埋在裡面
-  function getSVTBeat(x_abs, cyclePx) {
-    const t = (((x_abs % cyclePx) + cyclePx) % cyclePx) / cyclePx;
-    let val = 0;
-    // 窄 QRS 佔據週期的前段
-    if (t >= 0.00 && t <= 0.04) val -= 0.05 * Math.sin(Math.PI * t / 0.04);
-    else if (t > 0.04 && t <= 0.12) {
-      if (t <= 0.08) val += 0.9 * (t - 0.04) / 0.04;
-      else val += 0.9 * (0.12 - t) / 0.04;
-    }
-    else if (t > 0.12 && t <= 0.18) {
-      if (t <= 0.15) val -= 0.2 * (t - 0.12) / 0.03;
-      else val -= 0.2 * (0.18 - t) / 0.03;
-    }
-    // 由於心率過快，逆行P波或復極T波融合成一個連續的正向寬波
-    if (t >= 0.18 && t <= 0.95) {
-      val += 0.32 * Math.sin(Math.PI * (t - 0.18) / 0.77);
-    }
-    return val;
+function updateMicUI(listening) {
+  const btn = document.getElementById('btn-mic-toggle');
+  const text = document.getElementById('mic-status-text');
+  if (!btn || !text) return;
+  
+  if (listening) {
+    btn.classList.add('listening');
+    text.innerText = '語音：開';
+  } else {
+    btn.classList.remove('listening');
+    text.innerText = '語音：關';
   }
+}
 
-  // 6. 心房顫動 (AF): R-R絕對不規則 + 基線高頻顫動 f 波
-  function getAFValue(x_abs, W) {
-    const baseCycle = W * 60 / 110 / 2.5;
-    // 臨床經典：絕對不規則的 R-R 間期序列
-    const rrFractions = [1.25, 0.75, 1.4, 0.65, 1.1, 1.35, 0.7, 1.2, 0.85, 1.05];
-    let beatPositions = [];
-    let acc = 0;
-    for (let f of rrFractions) {
-      acc += f * baseCycle;
-      beatPositions.push(acc);
-    }
-    const totalPeriod = acc;
-    const x_mod = ((x_abs % totalPeriod) + totalPeriod) % totalPeriod;
+function processSpeechTranscript(transcript) {
+  const cleanText = transcript.replace(/[，。！？、\s]/g, '');
+  if (cleanText.includes('完成')) {
+    logAction(`語音紀錄: "${cleanText}"`, 'voice');
     
-    let beatVal = 0;
-    const activePx = W * 60 / 75 / 2.5; 
-    
-    for (let i = 0; i < beatPositions.length; i++) {
-      const bp = beatPositions[i];
-      let diff = x_mod - bp;
-      if (diff < -totalPeriod / 2) diff += totalPeriod;
-      if (diff > totalPeriod / 2) diff -= totalPeriod;
-      
-      if (diff >= 0 && diff < activePx) {
-        beatVal = getNormalBeatNoP(diff / activePx);
-        break;
-      }
-    }
-    
-    // 心房混亂顫動基線 (由多重弦波疊加而成的生理雜訊)
-    const fWave = 0.09 * Math.sin(x_abs * 0.18) + 
-                  0.04 * Math.sin(x_abs * 0.35) + 
-                  0.02 * Math.sin(x_abs * 0.55);
-                  
-    return beatVal + fWave;
-  }
-
-  // 7. 心室頻脈 (VT): 源自心室傳導，Lead II 必為連續、寬大、畸形且反向倒置的單形性巨波
-  function getVTValue(x_abs, cyclePx) {
-    const t = (((x_abs % cyclePx) + cyclePx) % cyclePx) / cyclePx;
-    // 醫學特徵：心室除極向量完全逆轉，呈現連續寬大倒置波
-    let val = -0.85 * Math.sin(2 * Math.PI * t) - 
-              0.22 * Math.sin(4 * Math.PI * t - 0.6) - 
-              0.05 * Math.sin(6 * Math.PI * t);
-    return val;
-  }
-
-  // 8. 心室顫動 (VF): 致命混亂微波，完全失去基本心電圖結構
-  function getVFValue(x_abs) {
-    const t = x_abs * 0.06;
-    // 生理學多形性包絡線：使振幅動態隨機波動
-    const envelope = 0.5 * (0.6 + 0.4 * Math.sin(t * 0.05) * Math.cos(t * 0.02));
-    const val = envelope * (Math.sin(t) * 0.75 +
-                            Math.sin(t * 1.42) * 0.45 +
-                            Math.sin(t * 2.85) * 0.30 +
-                            Math.sin(t * 4.17) * 0.15);
-    return val;
-  }
-
-  // 9. 三度房室傳導阻滯 (AVB3): 心房(P波)與心室(寬QRS)完全分離，各走各的
-  function getAVB3Value(x_abs, pCycle, qCycle, W) {
-    // 心房竇房結仍規則發電：產生頻率約 75 bpm 的標準正向 P 波
-    const x_p = ((x_abs % pCycle) + pCycle) % pCycle;
-    const pActive = W * 60 / 75 / 2.5 * 0.25;
-    let pVal = 0;
-    if (x_p < pActive) {
-      pVal = 0.16 * Math.sin(Math.PI * x_p / pActive);
-    }
-    
-    // 心室自搏心律：傳導受阻，心室自主放電極慢 (約 35 bpm)，且波形為寬大畸形的 QRS-T
-    const x_q = ((x_abs % qCycle) + qCycle) % qCycle;
-    const qrsActive = W * 60 / 75 / 2.5 * 0.85;
-    let qrsVal = 0;
-    if (x_q < qrsActive) {
-      qrsVal = getWideQRS(x_q / qrsActive);
-    }
-    
-    // 兩者電氣在基線上隨機相遇重疊 (完美重現房室分離解剖生理現象)
-    return pVal + qrsVal;
-  }
-  // ─── 統一繪圖渲染器 ────────────────────────────────
-  function drawECGWave(rhythmKey) {
-    const W = canvas.width, H = canvas.height;
-    const amp = H * 0.38;
-    const yBase = H * 0.55;
-    const def = RHYTHM_DEFS[rhythmKey];
-
-    ctx.clearRect(0, 0, W, H);
-    drawGrid(W, H);
-
-    ctx.beginPath();
-    ctx.strokeStyle = def.color;
-    ctx.lineWidth   = 2.2;
-    ctx.shadowColor = def.color;
-    ctx.shadowBlur  = 6;
-
-    // 計算各心律之週期 (以寬度 W 為基準，保持比例一致)
-    const nsrCycle = Math.round(W * 60 / 75 / 2.5);
-    const svtCycle = Math.round(W * 60 / 170 / 2.5);
-    const sbCycle  = Math.round(W * 60 / 40 / 2.5);
-    const peaCycle = Math.round(W * 60 / 55 / 2.5);
-    const vtCycle  = Math.round(W * 60 / 160 / 2.5);
-    const pCycle   = Math.round(W * 60 / 75 / 2.5);
-    const qCycle   = Math.round(W * 60 / 35 / 2.5);
-    const activePx = Math.round(W * 60 / 75 / 2.5);
-
-    for (let px = 0; px < W; px++) {
-      const x_abs = px + offset;
-      let a = 0;
-
-      if (rhythmKey === 'nsr') {
-        a = getSinusBeat(x_abs, nsrCycle, activePx);
-      } else if (rhythmKey === 'svt') {
-        a = getSVTBeat(x_abs, svtCycle);
-      } else if (rhythmKey === 'af') {
-        a = getAFValue(x_abs, W);
-      } else if (rhythmKey === 'vt') {
-        a = getVTValue(x_abs, vtCycle);
-      } else if (rhythmKey === 'vf') {
-        a = getVFValue(x_abs);
-      } else if (rhythmKey === 'sb') {
-        a = getSinusBeat(x_abs, sbCycle, activePx);
-      } else if (rhythmKey === 'avb3') {
-        a = getAVB3Value(x_abs, pCycle, qCycle, W);
-      } else if (rhythmKey === 'pea') {
-        a = getSinusBeat(x_abs, peaCycle, activePx);
-      }
-
-      const y = yBase - a * amp;
-      if (px === 0) ctx.moveTo(px, y); else ctx.lineTo(px, y);
-    }
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
-
-  // 心電圖方格紙背景
-  function drawGrid(W, H) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-    ctx.lineWidth   = 0.5;
-    const smallCell = 10;
-    for (let x = 0; x < W; x += smallCell) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
-    }
-    for (let y = 0; y < H; y += smallCell) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-    }
-    // 粗格
-    ctx.strokeStyle = 'rgba(255,255,255,0.09)';
-    ctx.lineWidth   = 1;
-    for (let x = 0; x < W; x += smallCell * 5) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
-    }
-    for (let y = 0; y < H; y += smallCell * 5) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    if (cleanText.includes('給藥完成') || cleanText.includes('強心針完成')) {
+      administerEpinephrine();
+    } else if (cleanText.includes('電擊完成')) {
+      triggerAEDShock();
     }
   }
+}
 
-  // ─── 主動畫迴圈 ─────────────────────────────────
-  function animate() {
-    drawECGWave(currentRhythm);
-    offset += 2.0; // 滾動速度，以 px/frame 表示
-    animId = requestAnimationFrame(animate);
+// Crisp beep oscillator sound generator (prevents clicking pops with exponential gain ramps)
+function playOscillatorTone(frequency, durationMs) {
+  if (!audioCtx) return;
+  
+  // Resume context if suspended
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
   }
 
-  function startAnimation() {
-    if (animId) cancelAnimationFrame(animId);
-    animate();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  
+  osc.type = 'square'; // Identical square wave sound to target app
+  osc.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+  
+  // Set volume envelope
+  gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + (durationMs / 1000));
+  
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  
+  osc.start();
+  osc.stop(audioCtx.currentTime + (durationMs / 1000));
+}
+
+// === 2. Global Stopwatch & CPR Timer ===
+function updateGlobalStopwatch() {
+  const diffMs = new Date() - startTime;
+  const totalSeconds = Math.floor(diffMs / 1000);
+  
+  const s = totalSeconds % 60;
+  const m = Math.floor((totalSeconds / 60) % 60);
+  const h = Math.floor(totalSeconds / 3600);
+  
+  document.getElementById('global-timer-readout').innerText = 
+    `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+function startCPRCycleTimer() {
+  if (cprTimerInterval) clearInterval(cprTimerInterval);
+  cprCountdownLeft = 120;
+  updateCPRTimerReadout();
+
+  cprTimerInterval = setInterval(() => {
+    if (activeCPRMode === 'ROSC') return;
+
+    cprCountdownLeft--;
+    updateCPRTimerReadout();
+
+    // Visual & audio tick warnings at <= 20 seconds
+    if (cprCountdownLeft <= 20 && cprCountdownLeft > 0) {
+      playOscillatorTone(800, 150); // Small rhythm prompt tone
+    }
+
+    if (cprCountdownLeft <= 0) {
+      playOscillatorTone(2000, 1000); // 2 min warning alarm
+      cprCountdownLeft = 120;
+      logAction('兩分鐘循環結束 (Cycle Finished)', 'end');
+    }
+  }, 1000);
+}
+
+function updateCPRTimerReadout() {
+  const mm = Math.floor(cprCountdownLeft / 60).toString().padStart(2, '0');
+  const ss = (cprCountdownLeft % 60).toString().padStart(2, '0');
+  const readout = document.getElementById('cpr-timer-readout');
+  
+  readout.innerText = `${mm}:${ss}`;
+  
+  // Highlight Yellow warning at <= 20 seconds
+  if (cprCountdownLeft <= 20) {
+    readout.style.color = 'var(--color-yellow)';
+  } else {
+    readout.style.color = 'var(--ios-text)';
   }
+}
 
-  // ─── 學習模式：更新說明卡 ────────────────────────
-  function updateInfoCard(rhythmKey) {
-    const def  = RHYTHM_DEFS[rhythmKey];
-    const info = def.info;
+function resetCPRCycleTimer() {
+  cprCountdownLeft = 120;
+  updateCPRTimerReadout();
+  logAction('循環重置 (Cycle Reset)');
+}
 
-    infoTitle.textContent = info.title;
-    infoList.replaceChildren();
-    info.criteria.forEach(c => {
-      const li = document.createElement('li');
-      const ci = document.createElement('span');
-      ci.className   = 'ci';
-      ci.textContent = '▶';
-      li.appendChild(ci);
-      li.append(' ' + c);
-      infoList.appendChild(li);
-    });
-    infoAction.textContent = info.action;
+// === 3. Metronome Core Loop & Ratio Handling ===
+function startMetronomeTickLoop() {
+  if (metronomeInterval) clearInterval(metronomeInterval);
+  if (!isMetronomeRunning) return;
 
-    // 更新 HUD
-    rateDisplay.textContent    = def.rate > 0 ? `❤️ ${def.rate} bpm` : '❤️ 無有效脈搏';
-    rhythmDisplay.textContent  = practiceMode === 'learn' ? def.name : '';
-    rateDisplay.style.color    = def.color;
-  }
+  // 120 bpm = tick every 500ms
+  metronomeInterval = setInterval(() => {
+    if (isBreathPaused || activeCPRMode === 'ROSC') return;
 
-  // ─── 切換心律（學習模式）────────────────────────
-  function switchRhythm(rhythmKey) {
-    currentRhythm = rhythmKey;
-    document.querySelectorAll('.rhythm-btn').forEach(b => {
-      b.classList.toggle('active', b.dataset.rhythm === rhythmKey);
-    });
-    if (practiceMode === 'learn') updateInfoCard(rhythmKey);
-  }
+    metronomeBeatCount++;
+    const rule = CPR_MODES[activeCPRMode];
 
-  // ─── 挑戰模式 ────────────────────────────────────
-  function buildChallengeQueue() {
-    challengeQueue = [...CHALLENGE_POOL].sort(() => Math.random() - 0.5);
-  }
-
-  function nextChallengeQuestion() {
-    if (challengeQueue.length === 0) {
-      // 全部完成，顯示成績
-      challengeResult.innerHTML =
-        `<strong style="color:var(--ecg-green);font-size:1rem;">🏆 挑戰完成！得分：${challengeScore} / ${challengeTotal}</strong>` +
-        `<br><span style="color:var(--text-secondary);font-size:0.85rem;">點擊「下一題」重新開始</span>`;
-      challengeResult.style.display = 'block';
-      challengeNext.style.display   = 'block';
-      challengeNext.textContent      = '🔄 重新挑戰';
-      scoreDisplay.textContent       = `得分 ${challengeScore}/${challengeTotal}`;
-      challengeAnswered = true;
+    // --- Mode CONT (Continuous Compression) ---
+    if (rule.type === 'cont') {
+      playMetronomeCompressionBeep();
+      setRingCirclePercentOffset(0);
+      document.getElementById('cpr-breath-hint').innerText = '持續按壓';
       return;
     }
 
-    challengeAnswered   = false;
-    challengeCurrent    = challengeQueue.pop();
-    currentRhythm       = challengeCurrent.rhythm;
-    challengeResult.style.display = 'none';
-    challengeNext.style.display   = 'none';
+    // --- Mode LUCAS (Asynchronous 6s Breaths) ---
+    if (rule.type === 'lucas') {
+      playMetronomeCompressionBeep();
+      
+      const remainTicks = rule.limit - metronomeBeatCount;
+      const remainSeconds = Math.ceil(remainTicks / 2);
+      document.getElementById('cpr-breath-hint').innerText = `倒數: ${remainSeconds}s`;
 
-    // 更新 HUD（隱藏名稱）
-    const def = RHYTHM_DEFS[currentRhythm];
-    rateDisplay.textContent   = def.rate > 0 ? `❤️ ${def.rate} bpm` : '❤️ 無有效脈搏';
-    rhythmDisplay.textContent = '？ 你能辨識這個心律嗎？';
-    rateDisplay.style.color   = '#fff';
+      const percent = (metronomeBeatCount / rule.limit) * 100;
+      setRingCirclePercentOffset(percent);
 
-    // 建立選項（正確 + 3 個干擾）
-    const choices = [currentRhythm, ...challengeCurrent.distractors]
-      .sort(() => Math.random() - 0.5);
-
-    challengeChoices.replaceChildren();
-    const LABELS = ['A', 'B', 'C', 'D'];
-    choices.forEach((rKey, i) => {
-      const btn = document.createElement('button');
-      btn.className = 'choice-btn';
-      const lbl = document.createElement('span');
-      lbl.className   = 'choice-label';
-      lbl.textContent = LABELS[i];
-      btn.appendChild(lbl);
-      const txt = document.createElement('span');
-      txt.textContent = RHYTHM_DEFS[rKey].name;
-      btn.appendChild(txt);
-      btn.addEventListener('click', () => handleChallengeAnswer(rKey, btn, choices));
-      challengeChoices.appendChild(btn);
-    });
-  }
-
-  function handleChallengeAnswer(selectedKey, btn, choices) {
-    if (challengeAnswered) return;
-    challengeAnswered = true;
-    challengeTotal++;
-
-    const correct = selectedKey === challengeCurrent.rhythm;
-    if (correct) challengeScore++;
-
-    // 標色
-    challengeChoices.querySelectorAll('.choice-btn').forEach((b, i) => {
-      b.disabled = true;
-      if (choices[i] === challengeCurrent.rhythm) b.classList.add('correct');
-      else if (b === btn && !correct)              b.classList.add('wrong');
-    });
-
-    // 顯示解析
-    const def = RHYTHM_DEFS[challengeCurrent.rhythm];
-    challengeResult.innerHTML =
-      `<div style="color:${correct ? 'var(--ecg-green)' : 'var(--ecg-red)'};font-weight:700;margin-bottom:0.4rem;">
-        ${correct ? '✅ 答對了！' : '✖ 答錯，正確答案是：' + def.name}
-      </div>
-      <ul class="criteria-list" style="font-size:0.82rem;">
-        ${def.info.criteria.map(c => `<li><span class="ci">▶</span> ${c}</li>`).join('')}
-      </ul>
-      <div class="alert-box" style="margin-top:0.5rem;font-size:0.8rem;">${def.info.action}</div>`;
-    challengeResult.style.display = 'block';
-    challengeNext.style.display   = 'block';
-    challengeNext.textContent      = challengeQueue.length > 0 ? '下一題 →' : '查看成績 →';
-    scoreDisplay.textContent       = `得分 ${challengeScore}/${challengeTotal}`;
-
-    // 顯示波形名稱
-    rhythmDisplay.textContent = def.name;
-    rhythmDisplay.style.color = def.color;
-  }
-
-  // ─── 模式切換 ────────────────────────────────────
-  function setMode(mode) {
-    practiceMode = mode;
-    if (mode === 'learn') {
-      learnBtn.classList.add('active-mode');
-      challengeBtn.classList.remove('active-mode');
-      rhythmSelector.style.display = 'flex';
-      infoCard.style.display       = 'block';
-      challengeArea.style.display  = 'none';
-      updateInfoCard(currentRhythm);
-    } else {
-      challengeBtn.classList.add('active-mode');
-      learnBtn.classList.remove('active-mode');
-      rhythmSelector.style.display = 'none';
-      infoCard.style.display       = 'none';
-      challengeArea.style.display  = 'block';
-      challengeScore = 0;
-      challengeTotal = 0;
-      buildChallengeQueue();
-      nextChallengeQuestion();
-      scoreDisplay.textContent = '得分 0/0';
+      if (metronomeBeatCount >= rule.limit) {
+        metronomeBeatCount = 0;
+        triggerBreathAlertSequence(true); // Asynchronous breath overlay flash
+      }
+      return;
     }
-  }
 
-  // ─── 事件綁定 ────────────────────────────────────
-  document.querySelectorAll('.rhythm-btn').forEach(btn => {
-    btn.addEventListener('click', () => switchRhythm(btn.dataset.rhythm));
-  });
+    // --- Ratio Modes (30:2, 15:2) ---
+    playMetronomeCompressionBeep();
+    
+    const percent = (metronomeBeatCount / rule.limit) * 100;
+    setRingCirclePercentOffset(percent);
+    document.getElementById('cpr-breath-hint').innerText = `計數: ${metronomeBeatCount}`;
 
-  learnBtn.addEventListener('click', () => setMode('learn'));
-  challengeBtn.addEventListener('click', () => setMode('challenge'));
-
-  challengeNext.addEventListener('click', () => {
-    if (challengeQueue.length === 0 && challengeAnswered) {
-      // 重新開始
-      challengeScore = 0;
-      challengeTotal = 0;
-      buildChallengeQueue();
-      scoreDisplay.textContent = '得分 0/0';
+    if (metronomeBeatCount >= rule.limit) {
+      isBreathPaused = true;
+      metronomeBeatCount = 0;
+      document.getElementById('cpr-breath-hint').innerText = '給氧';
+      triggerSynchronousBreathsSequence();
     }
-    nextChallengeQuestion();
-  });
 
-  // ─── 初始化 ─────────────────────────────────────
-  switchRhythm('nsr');
-  updateInfoCard('nsr');
-  startAnimation();
+  }, 500);
 }
 
+function playMetronomeCompressionBeep() {
+  playOscillatorTone(3300, 50); // Crisp 3300Hz quick click
+  triggerCardTickFlash();
+}
 
-// ═══════════════════════════════════════════════
-// 啟動
-// ═══════════════════════════════════════════════
-document.addEventListener('DOMContentLoaded', () => {
-  initECGBackground();
-  initTabs();
-  initBasicsTabs();
-  initLeadPractice();
-  initPhotoGallery();
-  initQuiz();
-  initUploadAnalysis();
-  initPractice();
+function setRingCirclePercentOffset(percent) {
+  const offset = (percent / 100) * ringCircumference;
+  ringCircle.style.strokeDashoffset = offset;
+}
+
+// Animate visual cardiogram compression flash on beat
+function triggerCardTickFlash() {
+  const card = document.getElementById('cpr-metronome-card');
+  card.classList.add('flash-cpr-beat');
+  setTimeout(() => card.classList.remove('flash-cpr-beat'), 100);
+}
+
+// 2 breaths at ratio compression pauses (30:2 or 15:2)
+function triggerSynchronousBreathsSequence() {
+  // Clear ring circle offset
+  setRingCirclePercentOffset(100);
+
+  // First Breath
+  playOscillatorTone(1000, 800); // 1000Hz long breath sound
+  triggerVisualFlashOverlay('breath');
+
+  setTimeout(() => {
+    // Second Breath
+    playOscillatorTone(1000, 800);
+    triggerVisualFlashOverlay('breath');
+  }, 1200);
+
+  // Resume Chest Compressions after 2 breaths complete (~2.4s)
+  setTimeout(() => {
+    isBreathPaused = false;
+    setRingCirclePercentOffset(0);
+    document.getElementById('cpr-breath-hint').innerText = '準備中...';
+  }, 2400);
+}
+
+// Visual screen flash indicator overlay for high-stress environments
+function triggerVisualFlashOverlay(type) {
+  const overlay = document.getElementById('vent-overlay');
+  const txt = document.getElementById('vent-text');
+  
+  if (type === 'breath') {
+    txt.innerText = '給氧';
+    speakText('給氧');
+    overlay.className = 'vent-flash-overlay active-breath';
+    setTimeout(() => overlay.className = 'vent-flash-overlay', 800);
+  } else if (type === 'shock') {
+    txt.innerText = '電擊';
+    speakText('電擊');
+    overlay.className = 'vent-flash-overlay active-shock';
+    setTimeout(() => overlay.className = 'vent-flash-overlay', 800);
+  }
+}
+
+// Asynchronous background breathing flash
+function triggerBreathAlertSequence(isAsynchronous = false) {
+  if (isAsynchronous) {
+    playOscillatorTone(1000, 800);
+    triggerVisualFlashOverlay('breath');
+    setTimeout(() => {
+      setRingCirclePercentOffset(0);
+    }, 200);
+  }
+}
+
+// === 4. Metronome Controls & Modes Switch ===
+function toggleMetronome() {
+  isMetronomeRunning = !isMetronomeRunning;
+  const btn = document.getElementById('btn-toggle-metronome');
+  
+  if (isMetronomeRunning) {
+    btn.classList.add('active');
+    btn.querySelector('span').innerText = '節拍器：開';
+    metronomeBeatCount = 0;
+    isBreathPaused = false;
+    startMetronomeTickLoop();
+  } else {
+    btn.classList.remove('active');
+    btn.querySelector('span').innerText = '節拍器：關';
+    if (metronomeInterval) clearInterval(metronomeInterval);
+    setRingCirclePercentOffset(0);
+    document.getElementById('cpr-breath-hint').innerText = '準備中...';
+  }
+}
+
+function setCPRMode(modeName) {
+  // Clear active classes
+  document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-rosc-trigger').classList.remove('active');
+
+  const rule = CPR_MODES[modeName];
+  activeCPRMode = modeName;
+  metronomeBeatCount = 0;
+  isBreathPaused = false;
+  setRingCirclePercentOffset(0);
+  document.getElementById('cpr-breath-hint').innerText = '準備中...';
+
+  // Toggle active class on selected button
+  if (modeName === '30:2') document.getElementById('mode-30-2').classList.add('active');
+  if (modeName === '15:2') document.getElementById('mode-15-2').classList.add('active');
+  if (modeName === 'CONT') document.getElementById('mode-cont').classList.add('active');
+  if (modeName === 'LUCAS') document.getElementById('mode-lucas').classList.add('active');
+
+  let statusText = 'CPR 進行中';
+  let logText = modeName;
+
+  if (modeName === 'CONT') logText = '連續按壓';
+  if (modeName === 'LUCAS') {
+    statusText = '6秒給氧照護';
+    logText = '6秒給氧 (MCPR)';
+  }
+
+  document.getElementById('cpr-status-label').innerText = statusText;
+  logAction(`模式切換: ${logText}`);
+}
+
+function triggerROSCState() {
+  document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-rosc-trigger').classList.add('active');
+
+  activeCPRMode = 'ROSC';
+  isBreathPaused = false;
+  if (metronomeInterval) clearInterval(metronomeInterval);
+  setRingCirclePercentOffset(0);
+
+  document.getElementById('cpr-status-label').innerText = 'ROSC / 復甦後照護';
+  document.getElementById('cpr-breath-hint').innerText = '監測生命徵象';
+
+  logAction('患者恢復自發循環 (ROSC)', 'rosc');
+}
+
+// === 5. Shock Shorter Helpers ===
+function triggerAEDShock() {
+  logAction('AED 電擊', 'shock');
+  triggerVisualFlashOverlay('shock');
+  resetCPRCycleTimer();
+}
+
+function triggerManualShock() {
+  const joules = document.getElementById('manual-joules-select').value;
+  logAction(`手動電擊 ${joules}J (Manual Shock)`, 'shock');
+  triggerVisualFlashOverlay('shock');
+  resetCPRCycleTimer();
+}
+
+function logECGRhythm(selectElement) {
+  const rhythm = selectElement.value;
+  if (rhythm) {
+    logAction(`心律評估: ${rhythm}`, 'ecg');
+    selectElement.selectedIndex = 0; // Reset index to default placeholder
+  }
+}
+
+// === 6. Epinephrine Medication Logic ===
+function administerEpinephrine() {
+  const btn = document.getElementById('btn-epinephrine');
+  const timerLabel = document.getElementById('epi-timer-readout');
+  const bar = document.getElementById('epi-progress-bar');
+
+  logAction('給予 Epinephrine 1mg', 'drug');
+
+  // Reset any alert states
+  btn.classList.remove('epi-alert');
+
+  // Set transition progress bar
+  bar.style.transition = 'none';
+  bar.style.width = '0%';
+  bar.style.display = 'block';
+
+  // Force reflow and run visual transition across 180s (3min)
+  setTimeout(() => {
+    bar.style.transition = 'width 180s linear';
+    bar.style.width = '100%';
+  }, 50);
+
+  let countdownLeft = 180;
+  if (epinephrineInterval) clearInterval(epinephrineInterval);
+
+  timerLabel.innerText = '下劑倒數: 03:00';
+
+  epinephrineInterval = setInterval(() => {
+    countdownLeft--;
+    
+    const m = Math.floor(countdownLeft / 60);
+    const s = countdownLeft % 60;
+    timerLabel.innerText = `下劑倒數: ${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+
+    if (countdownLeft <= 0) {
+      clearInterval(epinephrineInterval);
+      timerLabel.innerText = '請立即給藥';
+      speakText('給藥');
+      playOscillatorTone(1500, 500); // Admin alarm prompt
+      btn.classList.add('epi-alert'); // Triggers green pulsating glowing animation
+    }
+  }, 1000);
+}
+
+// === 7. Logging & TXT Export System ===
+function logAction(text, category = '') {
+  const container = document.getElementById('logs-container');
+  const entry = document.createElement('div');
+  
+  let finalCategory = category;
+  if (text.includes('建立 IV/IO') || text.includes('建立IV/IO') || text.includes('建立進階呼吸道')) {
+    finalCategory = 'dark-green';
+  }
+  entry.className = `log-entry ${finalCategory}`;
+
+  const now = new Date();
+  const h = now.getHours().toString().padStart(2, '0');
+  const m = now.getMinutes().toString().padStart(2, '0');
+  const s = now.getSeconds().toString().padStart(2, '0');
+
+  entry.innerHTML = `
+    <span class="log-time">${h}:${m}:${s}</span>
+    <span class="log-msg">${text}</span>
+  `;
+
+  container.prepend(entry);
+}
+
+function exportLogsToTxt() {
+  let doc = `紀錄時間: ${new Date().toLocaleString()}\n`;
+  doc += "===================================\n\n";
+
+  const entries = document.querySelectorAll('.log-entry');
+  
+  // Read array backwards to align logs in chronologically ascending order
+  const array = Array.from(entries).reverse();
+  array.forEach(entry => {
+    const time = entry.querySelector('.log-time').innerText;
+    let msg = entry.querySelector('.log-msg').innerText;
+    if (msg.includes('急救流程啟動') || msg.includes('Code Blue Started')) {
+      msg = '急救開始';
+    }
+    if (msg.includes('患者恢復自發循環 (ROSC) - 進入照護模式') || msg.includes('患者恢復自發循環 (ROSC)-進入照護模式')) {
+      msg = '患者恢復自發循環 (ROSC)';
+    }
+    doc += `[${time}] ${msg}\n`;
+  });
+
+  doc += "\n===================================\n";
+
+  const blob = new Blob([doc], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `救護助手急救紀錄_${new Date().getTime()}.txt`;
+  a.click();
+}
+
+function endResuscitationMission() {
+  // Clear all running intervals
+  if (globalTimerInterval) clearInterval(globalTimerInterval);
+  if (cprTimerInterval) clearInterval(cprTimerInterval);
+  if (metronomeInterval) clearInterval(metronomeInterval);
+  if (epinephrineInterval) clearInterval(epinephrineInterval);
+
+  // Stop Speech Recognition
+  isListening = false;
+  if (recognition) {
+    try {
+      recognition.stop();
+    } catch (e) {
+      console.error("Error stopping recognition:", e);
+    }
+  }
+
+  // Stop WakeLock screen lock
+  releaseScreenWakeLock();
+
+  // Metronome stops
+  document.getElementById('cpr-status-label').innerText = '任務結束';
+  document.getElementById('cpr-timer-readout').innerText = 'STOP';
+  document.getElementById('cpr-timer-readout').style.color = 'var(--color-red)';
+  document.getElementById('cpr-breath-hint').innerText = '';
+  setRingCirclePercentOffset(0);
+
+  // Reset metronome toggle
+  const metroToggle = document.getElementById('btn-toggle-metronome');
+  metroToggle.classList.remove('active');
+  metroToggle.querySelector('span').innerText = '已停止';
+
+  // Epinephrine reset
+  const epiBtn = document.getElementById('btn-epinephrine');
+  epiBtn.classList.remove('epi-alert');
+  document.getElementById('epi-timer-readout').innerText = '任務結束';
+  document.getElementById('epi-progress-bar').style.width = '0%';
+
+  logAction('任務結束 (Mission Ended)', 'end');
+}
+
+// === 8. Screen WakeLock API ===
+async function requestScreenWakeLock() {
+  if ('wakeLock' in navigator) {
+    try {
+      screenWakeLock = await navigator.wakeLock.request('screen');
+      console.log('Screen Wake Lock acquired successfully.');
+    } catch (err) {
+      console.log(`Failed to acquire Screen Wake Lock: ${err.message}`);
+    }
+  }
+}
+
+function releaseScreenWakeLock() {
+  if (screenWakeLock !== null) {
+    screenWakeLock.release().then(() => {
+      screenWakeLock = null;
+      console.log('Screen Wake Lock released.');
+    });
+  }
+}
+
+// Re-request wake lock if tab loses focus and returns
+document.addEventListener('visibilitychange', async () => {
+  if (screenWakeLock !== null && document.visibilityState === 'visible') {
+    requestScreenWakeLock();
+  }
 });

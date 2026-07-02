@@ -5,10 +5,7 @@ const ASSETS = [
   './styles.css',
   './app.js',
   './manifest.json',
-  './Stemi.png',
-  './VT.png',
-  './無明顯.png',
-  './ＣＰＲ安尼.png'
+  './d0c65ba4-4bd4-41bd-ab4d-e1063726e894.png'
 ];
 
 // Install Service Worker and cache assets
