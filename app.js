@@ -14,6 +14,9 @@ let isBreathPaused = false;
 let screenWakeLock = null;
 let recognition = null;
 let isListening = false;
+let speechRequested = false;
+let speechRestartTimer = null;
+let missionActive = false;
 
 // Circle Stroke Circumference
 const ringCircle = document.getElementById('timer-progress-ring');
@@ -33,11 +36,15 @@ const CPR_MODES = {
 
 // === 1. Launch & Core Audio Hook ===
 function startApp() {
+  if (missionActive) return;
+
   // Initialize Web Audio API on first user gesture (highly critical for Safari/iOS compatibility)
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  audioCtx = new AudioContextClass();
-  if (audioCtx.state === 'suspended') {
-    audioCtx.resume();
+  if (AudioContextClass) {
+    audioCtx = new AudioContextClass();
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
   }
 
   // Hide Splash Screen overlay
@@ -45,6 +52,7 @@ function startApp() {
 
   // Record start time
   startTime = new Date();
+  missionActive = true;
 
   // Request WakeLock to keep screen on
   requestScreenWakeLock();
@@ -63,13 +71,9 @@ function startApp() {
   if (!recognition) {
     initSpeechRecognition();
   }
-  if (recognition && !isListening) {
-    isListening = true;
-    try {
-      recognition.start();
-    } catch (e) {
-      console.error("Auto-start speech recognition error:", e);
-    }
+  if (recognition) {
+    speechRequested = true;
+    startSpeechRecognition();
   }
 }
 
@@ -104,28 +108,18 @@ function initSpeechRecognition() {
   
   recognition.onerror = (event) => {
     console.error("Speech recognition error:", event.error);
-    if (isListening && event.error !== 'not-allowed') {
-      try {
-        recognition.start();
-      } catch (e) {
-        console.error("Failed to restart speech recognition:", e);
-      }
-    } else {
-      isListening = false;
-      updateMicUI(false);
+    isListening = false;
+    const fatalErrors = ['not-allowed', 'service-not-allowed', 'audio-capture'];
+    if (fatalErrors.includes(event.error)) {
+      speechRequested = false;
     }
+    updateMicUI(false);
   };
   
   recognition.onend = () => {
-    if (isListening) {
-      try {
-        recognition.start();
-      } catch (e) {
-        console.error("Error restarting recognition on end:", e);
-      }
-    } else {
-      updateMicUI(false);
-    }
+    isListening = false;
+    updateMicUI(false);
+    if (speechRequested && missionActive) scheduleSpeechRecognitionRestart();
   };
   
   recognition.onresult = (event) => {
@@ -134,6 +128,25 @@ function initSpeechRecognition() {
     console.log("Speech recognized:", transcript);
     processSpeechTranscript(transcript);
   };
+}
+
+function startSpeechRecognition() {
+  if (!recognition || isListening || !speechRequested) return;
+  try {
+    recognition.start();
+  } catch (error) {
+    if (error.name !== 'InvalidStateError') {
+      console.error('Speech recognition start error:', error);
+    }
+  }
+}
+
+function scheduleSpeechRecognitionRestart() {
+  if (speechRestartTimer) clearTimeout(speechRestartTimer);
+  speechRestartTimer = setTimeout(() => {
+    speechRestartTimer = null;
+    startSpeechRecognition();
+  }, 500);
 }
 
 function toggleSpeechRecognition() {
@@ -145,19 +158,16 @@ function toggleSpeechRecognition() {
     return;
   }
   
-  if (isListening) {
-    isListening = false;
+  if (speechRequested) {
+    speechRequested = false;
+    if (speechRestartTimer) clearTimeout(speechRestartTimer);
     recognition.stop();
   } else {
     if (audioCtx && audioCtx.state === 'suspended') {
       audioCtx.resume();
     }
-    isListening = true;
-    try {
-      recognition.start();
-    } catch (e) {
-      console.error("Speech recognition start error:", e);
-    }
+    speechRequested = true;
+    startSpeechRecognition();
   }
 }
 
@@ -176,17 +186,71 @@ function updateMicUI(listening) {
 }
 
 function processSpeechTranscript(transcript) {
-  const cleanText = transcript.replace(/[，。！？、\s]/g, '');
-  if (cleanText.includes('完成')) {
-    logAction(`語音紀錄: "${cleanText}"`, 'voice');
-    
-    if (cleanText.includes('給藥完成') || cleanText.includes('強心針完成')) {
-      administerEpinephrine();
-    } else if (cleanText.includes('電擊完成')) {
-      triggerAEDShock();
-    }
-  }
+  // Remove punctuation/spaces and normalize English letters so phrases such as
+  // "I V / I O" and "ivio" resolve to the same command.
+  const cleanText = transcript
+    .replace(/[^\u3400-\u9FFFA-Za-z0-9]/g, '')
+    .toUpperCase();
+  const command = VOICE_COMMANDS.find(({ phrases }) =>
+    phrases.some(phrase => cleanText.includes(phrase))
+  );
+
+  if (!command) return;
+  logAction(`語音指令: ${command.label}`, 'voice');
+  command.action();
 }
+
+function logVoiceRecord(text, category = 'type') {
+  logAction(text, category);
+}
+
+const VOICE_COMMANDS = [
+  // 電擊：較明確的「手動電擊」必須放在一般「電擊」之前。
+  { label: '手動電擊', phrases: ['手動電擊完成', '手動電擊已完成'], action: triggerManualShock },
+  { label: 'AED 電擊', phrases: ['AED電擊完成', 'AED電擊已完成', '電擊完成'], action: triggerAEDShock },
+
+  // 給藥：必須包含藥名，避免「給藥完成」被誤記為特定藥物。
+  { label: 'Epinephrine 1mg', phrases: ['EPINEPHRINE完成', '腎上腺素完成', '腎上腺素一毫克完成', '強心針完成'], action: administerEpinephrine },
+  { label: 'Amio 300mg', phrases: ['AMIO三百完成', 'AMIO300完成', 'AMIODARONE三百完成', '胺碘酮三百完成'], action: () => logVoiceRecord('Amio 300mg', 'drug') },
+  { label: 'Amio 150mg', phrases: ['AMIO一百五完成', 'AMIO150完成', 'AMIODARONE一百五完成', '胺碘酮一百五完成'], action: () => logVoiceRecord('Amio 150mg', 'drug') },
+  { label: 'Lidocaine', phrases: ['LIDOCAINE完成', '利多卡因完成'], action: () => logVoiceRecord('Lidocaine', 'drug') },
+  { label: 'Atropine 1mg', phrases: ['ATROPINE完成', '阿托品完成', '阿托品一毫克完成'], action: () => logVoiceRecord('Atropine 1mg', 'drug') },
+  { label: 'Adenosine', phrases: ['ADENOSINE完成', '腺苷完成'], action: () => logVoiceRecord('Adenosine', 'drug') },
+
+  // CPR 與系統控制。
+  { label: 'ROSC', phrases: ['確認恢復自發循環', '恢復自發循環', '確認ROSC'], action: triggerROSCState },
+  { label: '30:2 模式', phrases: ['三十比二', '30比2'], action: () => setCPRMode('30:2') },
+  { label: '15:2 模式', phrases: ['十五比二', '15比2'], action: () => setCPRMode('15:2') },
+  { label: '連續按壓模式', phrases: ['切換連續按壓', '連續按壓模式'], action: () => setCPRMode('CONT') },
+  { label: '6 秒給氧模式', phrases: ['切換六秒給氧', '六秒給氧模式', '6秒給氧模式'], action: () => setCPRMode('LUCAS') },
+  { label: '節拍器開啟', phrases: ['開啟節拍器', '節拍器開'], action: () => setMetronomeRunning(true) },
+  { label: '節拍器關閉', phrases: ['關閉節拍器', '節拍器關'], action: () => setMetronomeRunning(false) },
+
+  // 處置與現場時間戳。
+  { label: '建立 IV/IO', phrases: ['建立IVIO完成', 'IVIO完成', '靜脈骨內管路完成'], action: () => logVoiceRecord('建立 IV/IO', 'drug') },
+  { label: '建立進階呼吸道', phrases: ['進階呼吸道完成', '氣管插管完成', '插管完成', 'LMA完成'], action: () => logVoiceRecord('建立進階呼吸道 (Endo/LMA)', 'drug') },
+  { label: 'BVM 給氧', phrases: ['BVM給氧完成', '球囊面罩給氧完成', '給氧完成'], action: () => logVoiceRecord('BVM / 給氧處置完成') },
+  { label: '胸外按壓換手', phrases: ['胸外按壓換手完成', '按壓換手完成', '換手完成'], action: () => logVoiceRecord('胸外按壓換手') },
+  { label: '脈搏檢查', phrases: ['脈搏檢查完成', '檢查脈搏完成'], action: () => logVoiceRecord('脈搏檢查完成') },
+  { label: '貼妥電擊貼片', phrases: ['電擊貼片完成', 'AED貼片完成', '貼片完成'], action: () => logVoiceRecord('電擊貼片已貼妥') },
+  { label: '5H5T 評估', phrases: ['5H5T完成', '五H五T完成', '5H5T評估完成'], action: () => logVoiceRecord('5H5T 評估') },
+  { label: 'OHCA', phrases: ['紀錄OHCA', '患者OHCA'], action: () => logVoiceRecord('患者類別: OHCA') },
+  { label: 'IHCA', phrases: ['紀錄IHCA', '患者IHCA'], action: () => logVoiceRecord('患者類別: IHCA') },
+
+  // 心律紀錄：要求「紀錄／確認心律」前綴，降低一般討論造成的誤記。
+  { label: '心律 VF', phrases: ['紀錄心律VF', '確認心律VF', '紀錄心室顫動'], action: () => logVoiceRecord('心律評估: VF', 'ecg') },
+  { label: '心律 pVT', phrases: ['紀錄心律PVT', '確認心律PVT', '紀錄無脈搏性心室頻脈', '紀錄無脈搏心室頻脈'], action: () => logVoiceRecord('心律評估: pVT', 'ecg') },
+  { label: '心律 Asystole', phrases: ['紀錄心律ASYSTOLE', '確認心電停止', '紀錄心電停止'], action: () => logVoiceRecord('心律評估: Asystole', 'ecg') },
+  { label: '心律 PEA', phrases: ['紀錄心律PEA', '確認心律PEA', '紀錄無脈搏電氣活動'], action: () => logVoiceRecord('心律評估: PEA', 'ecg') },
+  { label: '心律 NSR', phrases: ['紀錄心律NSR', '確認心律NSR', '紀錄正常竇性心律'], action: () => logVoiceRecord('心律評估: NSR', 'ecg') },
+  { label: '心律 SB', phrases: ['紀錄心律SB', '確認心律SB', '紀錄竇性心搏過緩', '紀錄竇性心緩'], action: () => logVoiceRecord('心律評估: SB', 'ecg') },
+  { label: '心律 ST', phrases: ['紀錄心律ST', '確認心律ST', '紀錄竇性心搏過速', '紀錄竇性心頻'], action: () => logVoiceRecord('心律評估: ST', 'ecg') },
+  { label: '心律 SVT', phrases: ['紀錄心律SVT', '確認心律SVT', '紀錄上心室頻脈', '紀錄心室上頻脈'], action: () => logVoiceRecord('心律評估: SVT', 'ecg') },
+  { label: '心律 VT', phrases: ['紀錄心律VT', '確認心律VT', '紀錄心室頻脈'], action: () => logVoiceRecord('心律評估: VT', 'ecg') },
+  { label: '心律 AFib', phrases: ['紀錄心律AFIB', '確認心房顫動', '紀錄心房顫動'], action: () => logVoiceRecord('心律評估: AFib', 'ecg') },
+  { label: '心律 AFlutter', phrases: ['紀錄心律AFLUTTER', '確認心房撲動', '紀錄心房撲動'], action: () => logVoiceRecord('心律評估: AFlutter', 'ecg') },
+  { label: '心律 AVB', phrases: ['紀錄心律AVB', '確認房室傳導阻滯', '紀錄房室傳導阻滯'], action: () => logVoiceRecord('心律評估: AVB', 'ecg') }
+];
 
 // Crisp beep oscillator sound generator (prevents clicking pops with exponential gain ramps)
 function playOscillatorTone(frequency, durationMs) {
@@ -361,6 +425,7 @@ function triggerSynchronousBreathsSequence() {
 
   // Resume Chest Compressions after 2 breaths complete (~2.4s)
   setTimeout(() => {
+    if (!missionActive) return;
     isBreathPaused = false;
     setRingCirclePercentOffset(0);
     document.getElementById('cpr-breath-hint').innerText = '準備中...';
@@ -398,7 +463,13 @@ function triggerBreathAlertSequence(isAsynchronous = false) {
 
 // === 4. Metronome Controls & Modes Switch ===
 function toggleMetronome() {
-  isMetronomeRunning = !isMetronomeRunning;
+  setMetronomeRunning(!isMetronomeRunning);
+}
+
+function setMetronomeRunning(shouldRun) {
+  if (!missionActive) return;
+  if (isMetronomeRunning === shouldRun && metronomeInterval) return;
+  isMetronomeRunning = shouldRun;
   const btn = document.getElementById('btn-toggle-metronome');
   
   if (isMetronomeRunning) {
@@ -417,6 +488,7 @@ function toggleMetronome() {
 }
 
 function setCPRMode(modeName) {
+  if (!missionActive) return;
   // Clear active classes
   document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
   document.getElementById('btn-rosc-trigger').classList.remove('active');
@@ -444,16 +516,17 @@ function setCPRMode(modeName) {
   }
 
   document.getElementById('cpr-status-label').innerText = statusText;
+  if (isMetronomeRunning) startMetronomeTickLoop();
   logAction(`模式切換: ${logText}`);
 }
 
 function triggerROSCState() {
+  if (!missionActive) return;
   document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
   document.getElementById('btn-rosc-trigger').classList.add('active');
 
   activeCPRMode = 'ROSC';
   isBreathPaused = false;
-  if (metronomeInterval) clearInterval(metronomeInterval);
   setRingCirclePercentOffset(0);
 
   document.getElementById('cpr-status-label').innerText = 'ROSC / 復甦後照護';
@@ -464,12 +537,14 @@ function triggerROSCState() {
 
 // === 5. Shock Shorter Helpers ===
 function triggerAEDShock() {
+  if (!missionActive) return;
   logAction('AED 電擊', 'shock');
   triggerVisualFlashOverlay('shock');
   resetCPRCycleTimer();
 }
 
 function triggerManualShock() {
+  if (!missionActive) return;
   const joules = document.getElementById('manual-joules-select').value;
   logAction(`手動電擊 ${joules}J (Manual Shock)`, 'shock');
   triggerVisualFlashOverlay('shock');
@@ -486,6 +561,7 @@ function logECGRhythm(selectElement) {
 
 // === 6. Epinephrine Medication Logic ===
 function administerEpinephrine() {
+  if (!missionActive) return;
   const btn = document.getElementById('btn-epinephrine');
   const timerLabel = document.getElementById('epi-timer-readout');
   const bar = document.getElementById('epi-progress-bar');
@@ -544,10 +620,13 @@ function logAction(text, category = '') {
   const m = now.getMinutes().toString().padStart(2, '0');
   const s = now.getSeconds().toString().padStart(2, '0');
 
-  entry.innerHTML = `
-    <span class="log-time">${h}:${m}:${s}</span>
-    <span class="log-msg">${text}</span>
-  `;
+  const timeElement = document.createElement('span');
+  timeElement.className = 'log-time';
+  timeElement.textContent = `${h}:${m}:${s}`;
+  const messageElement = document.createElement('span');
+  messageElement.className = 'log-msg';
+  messageElement.textContent = text;
+  entry.append(timeElement, messageElement);
 
   container.prepend(entry);
 }
@@ -556,7 +635,7 @@ function exportLogsToTxt() {
   let doc = `紀錄時間: ${new Date().toLocaleString()}\n`;
   doc += "===================================\n\n";
 
-  const entries = document.querySelectorAll('.log-entry');
+  const entries = document.querySelectorAll('.log-entry:not([data-placeholder="true"])');
   
   // Read array backwards to align logs in chronologically ascending order
   const array = Array.from(entries).reverse();
@@ -579,9 +658,12 @@ function exportLogsToTxt() {
   a.href = URL.createObjectURL(blob);
   a.download = `救護助手急救紀錄_${new Date().getTime()}.txt`;
   a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 0);
 }
 
 function endResuscitationMission() {
+  if (!missionActive) return;
+  missionActive = false;
   // Clear all running intervals
   if (globalTimerInterval) clearInterval(globalTimerInterval);
   if (cprTimerInterval) clearInterval(cprTimerInterval);
@@ -589,7 +671,9 @@ function endResuscitationMission() {
   if (epinephrineInterval) clearInterval(epinephrineInterval);
 
   // Stop Speech Recognition
+  speechRequested = false;
   isListening = false;
+  if (speechRestartTimer) clearTimeout(speechRestartTimer);
   if (recognition) {
     try {
       recognition.stop();
@@ -612,12 +696,22 @@ function endResuscitationMission() {
   const metroToggle = document.getElementById('btn-toggle-metronome');
   metroToggle.classList.remove('active');
   metroToggle.querySelector('span').innerText = '已停止';
+  isMetronomeRunning = false;
 
   // Epinephrine reset
   const epiBtn = document.getElementById('btn-epinephrine');
   epiBtn.classList.remove('epi-alert');
   document.getElementById('epi-timer-readout').innerText = '任務結束';
-  document.getElementById('epi-progress-bar').style.width = '0%';
+  const epiProgress = document.getElementById('epi-progress-bar');
+  epiProgress.style.transition = 'none';
+  epiProgress.style.width = '0%';
+
+  // Keep the record export available, but lock all clinical controls after mission end.
+  document.querySelectorAll('button:not(#btn-export-logs), select').forEach(control => {
+    control.disabled = true;
+  });
+  epiBtn.style.pointerEvents = 'none';
+  epiBtn.setAttribute('aria-disabled', 'true');
 
   logAction('任務結束 (Mission Ended)', 'end');
 }

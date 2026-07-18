@@ -792,3 +792,392 @@ header {
   50% { opacity: 1; }
   100% { opacity: 0.8; }
 }
+
+/* ==========================================================
+   Clinical high-contrast theme
+   Calm, equipment-like surfaces for high-stress environments.
+   ========================================================== */
+:root {
+  --ios-bg: #080c10;
+  --ios-card: #111820;
+  --ios-card-inner: #18232d;
+  --ios-card-border: #2a3947;
+  --ios-text: #f4f8fb;
+  --ios-text-secondary: #9fb0bf;
+  --color-red: #ff4d55;
+  --color-red-active: #d93740;
+  --color-red-glow: rgba(255, 77, 85, 0.24);
+  --color-blue: #3997f0;
+  --color-blue-active: #2477bd;
+  --color-blue-glow: rgba(57, 151, 240, 0.22);
+  --color-green: #41d17d;
+  --color-green-active: #2cab63;
+  --color-green-glow: rgba(65, 209, 125, 0.22);
+  --color-yellow: #ffd24d;
+  --color-yellow-active: #d6aa26;
+  --color-yellow-glow: rgba(255, 210, 77, 0.2);
+  --color-purple: #b992ff;
+  --color-orange: #f19a3e;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+}
+
+body {
+  background:
+    radial-gradient(circle at 50% -15%, rgba(46, 92, 124, 0.18), transparent 38%),
+    var(--ios-bg);
+}
+
+.app-container {
+  max-width: 1360px;
+}
+
+header {
+  height: 68px;
+  padding: 0 18px;
+  background: rgba(8, 12, 16, 0.96);
+  border-bottom: 1px solid #263542;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.brand-title h1 {
+  font-size: 1.2rem;
+  letter-spacing: 0.02em;
+}
+
+.brand-title span {
+  color: #7f95a6;
+  letter-spacing: 0.08em;
+}
+
+.system-badge {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 6px 11px;
+  border: 1px solid rgba(65, 209, 125, 0.42);
+  border-radius: 8px;
+  background: rgba(65, 209, 125, 0.08);
+  color: var(--color-green);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.system-badge::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-green);
+  box-shadow: 0 0 8px var(--color-green);
+}
+
+.main-grid {
+  grid-template-columns: minmax(310px, 0.95fr) minmax(330px, 1.05fr) minmax(340px, 1.1fr);
+  gap: 10px;
+  padding: 10px;
+}
+
+.panel {
+  gap: 12px;
+  padding: 15px;
+  border-radius: 12px;
+  border-color: var(--ios-card-border);
+  background: linear-gradient(180deg, #121b23 0%, #0f171e 100%);
+  box-shadow: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #405462 transparent;
+}
+
+.panel::-webkit-scrollbar { width: 5px; }
+.panel::-webkit-scrollbar-track { background: transparent; }
+.panel::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+  background: #405462;
+}
+
+#cpr-metronome-card { border-top: 3px solid var(--color-green); }
+#cpr-meds-card { border-top: 3px solid var(--color-blue); }
+#cpr-logging-card { border-top: 3px solid var(--color-purple); }
+
+.panel-header {
+  min-height: 34px;
+  padding-bottom: 9px;
+  border-bottom-color: #263541;
+}
+
+.panel-title {
+  color: #c4d0da;
+  font-size: 0.8rem;
+  letter-spacing: 0.14em;
+}
+
+.timer-container {
+  width: 206px;
+  height: 206px;
+  margin: 4px auto;
+}
+
+.progress-ring {
+  width: 196px;
+  height: 196px;
+  overflow: visible;
+}
+
+.progress-ring-circle-bg { stroke: #24333f; }
+.progress-ring-circle { filter: drop-shadow(0 0 4px rgba(65, 209, 125, 0.38)); }
+
+.cpr-clock {
+  font-family: var(--font-mono);
+  font-size: 3rem;
+  letter-spacing: -0.07em;
+}
+
+.cpr-status {
+  margin-top: 8px;
+  color: #b9c7d1;
+  font-size: 0.72rem;
+}
+
+.cpr-counter {
+  margin-top: 5px;
+  color: var(--color-green);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+}
+
+button, select { min-height: 52px; }
+
+.metro-toggle,
+.btn-mode,
+.btn-aed,
+.joule-select,
+.btn-manual-shock,
+.ecg-select,
+.btn-action,
+.btn-bottom {
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.metro-toggle {
+  min-height: 56px;
+  background: #17232c;
+  border-color: #344652;
+}
+
+.metro-toggle.active {
+  background: rgba(65, 209, 125, 0.14);
+  border-color: var(--color-green);
+  color: var(--color-green);
+  box-shadow: inset 4px 0 0 var(--color-green);
+}
+
+.modes-grid { gap: 7px; }
+
+.btn-mode {
+  min-height: 54px;
+  background: #17232c;
+  border-color: #30404d;
+  font-size: 0.9rem;
+}
+
+.btn-mode.active {
+  background: rgba(57, 151, 240, 0.16);
+  border-color: var(--color-blue);
+  color: #8bc6ff;
+  box-shadow: inset 4px 0 0 var(--color-blue);
+}
+
+.shocks-area {
+  gap: 7px;
+  padding-top: 12px;
+  border-top-color: #2a3947;
+}
+
+.btn-aed {
+  min-height: 60px;
+  background: var(--color-red);
+  font-size: 1.08rem;
+  letter-spacing: 0.05em;
+}
+
+.manual-shock-row { gap: 7px; }
+
+.joule-select,
+.ecg-select {
+  height: 54px;
+  background: #0b1218;
+  border-color: #3a4b58;
+}
+
+.btn-manual-shock {
+  min-height: 54px;
+  background: #a45f24;
+}
+
+.ecg-select {
+  color: var(--color-yellow);
+  text-align: left;
+}
+
+.epi-btn-container {
+  height: 76px;
+  border-radius: 8px;
+  border-color: var(--color-blue);
+  background: #15232e;
+  box-shadow: inset 4px 0 0 var(--color-blue);
+}
+
+.epi-btn-progress { background: rgba(57, 151, 240, 0.22); }
+.epi-title { font-size: 1.12rem; }
+.epi-status { color: #80bdf5; font-family: var(--font-mono); }
+
+.actions-grid { gap: 7px; }
+
+.btn-action {
+  min-height: 54px;
+  padding: 10px 7px;
+  background: #17232c;
+  border-color: #30404d;
+  font-size: 0.86rem;
+}
+
+.btn-action-primary {
+  min-height: 58px;
+  background: rgba(57, 151, 240, 0.09);
+  border-color: rgba(57, 151, 240, 0.68);
+  color: #85c4ff;
+}
+
+.btn-rosc {
+  min-height: 64px;
+  margin-top: 2px;
+  background: rgba(65, 209, 125, 0.1);
+  border-color: var(--color-green);
+  border-width: 1px;
+  box-shadow: inset 4px 0 0 var(--color-green);
+}
+
+.global-clock {
+  margin: 4px 0 7px;
+  padding: 12px 8px;
+  border: 1px solid #293a47;
+  border-radius: 8px;
+  background: #090f14;
+  color: #eaf4fb;
+  font-size: 3rem;
+}
+
+.log-stream {
+  min-height: 210px;
+  max-height: none;
+  padding: 5px 10px;
+  gap: 0;
+  border-radius: 8px;
+  border-color: #293a47;
+  background: #090f14;
+}
+
+.log-entry {
+  min-height: 39px;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom-color: #1f2c36;
+}
+
+.log-entry:not(:first-child) { opacity: 0.68; }
+.log-entry:nth-child(n+6) { opacity: 0.48; }
+.log-time { min-width: 70px; color: #718797; }
+.log-msg { line-height: 1.25; }
+
+.bottom-action-row { gap: 7px; }
+
+.btn-bottom {
+  min-height: 54px;
+  background: #17232c;
+  border-color: #30404d;
+}
+
+.btn-stop-mission {
+  background: rgba(255, 77, 85, 0.09);
+  border-color: rgba(255, 77, 85, 0.7);
+}
+
+.btn-mic-toggle {
+  min-height: 34px;
+  padding: 6px 11px;
+  border-radius: 8px;
+  background: #151f27;
+  border-color: #344652;
+  color: #a9bbc8;
+}
+
+.btn-mic-toggle.listening {
+  background: rgba(65, 209, 125, 0.1);
+  border-color: var(--color-green);
+  color: var(--color-green);
+  box-shadow: none;
+}
+
+.flash-cpr-beat { animation: clinical-cpr-beat 0.12s ease-out; }
+
+@keyframes clinical-cpr-beat {
+  0%, 100% { border-top-color: var(--color-green); }
+  50% { border-top-color: #d9ffe8; background: #15231c; }
+}
+
+button:focus-visible,
+select:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 2px;
+}
+
+button:disabled,
+select:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+@media (max-width: 1100px) {
+  .main-grid { grid-template-columns: 1fr 1fr; }
+  .logging-panel { grid-column: span 2; }
+  .log-stream { max-height: 260px; }
+}
+
+@media (max-width: 720px) {
+  header {
+    height: auto;
+    min-height: 66px;
+    padding: 8px 10px;
+  }
+
+  .brand-title span { display: none; }
+  .system-badge { display: none; }
+  .main-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    padding: 8px;
+    gap: 8px;
+  }
+  .panel { padding: 13px; }
+  .logging-panel { grid-column: span 1; }
+  .timer-container { margin-block: 0; }
+  .global-clock { font-size: 2.55rem; }
+  .bottom-action-row { display: grid; grid-template-columns: 1fr 1fr; }
+  .btn-stop-mission { grid-column: span 2; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

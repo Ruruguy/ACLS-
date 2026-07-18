@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-title" content="救護助手">
   
   <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=8">
 </head>
 <body>
 
@@ -54,8 +54,8 @@
           </svg>
           <span id="mic-status-text">語音：關</span>
         </button>
-        <div id="connection-badge" style="font-size: 0.75rem; font-weight: 800; background: var(--ios-card-inner); padding: 4px 10px; border-radius: 20px; color: var(--color-red);">
-          On fire
+        <div id="connection-badge" class="system-badge">
+          系統就緒
         </div>
       </div>
     </header>
@@ -174,7 +174,7 @@
 
         <!-- Console Logging Stream -->
         <div id="logs-container" class="log-stream">
-          <div class="log-entry">
+          <div class="log-entry" data-placeholder="true">
             <span class="log-time">--:--</span>
             <span class="log-msg">系統待命...</span>
           </div>
@@ -183,7 +183,7 @@
         <!-- Bottom Controls -->
         <div class="bottom-action-row">
           <button class="btn-bottom" onclick="logAction('5H5T 評估', 'type')">5H5T</button>
-          <button class="btn-bottom" onclick="exportLogsToTxt()">匯出紀錄</button>
+          <button id="btn-export-logs" class="btn-bottom" onclick="exportLogsToTxt()">匯出紀錄</button>
           <button class="btn-bottom btn-stop-mission" onclick="endResuscitationMission()">結束任務</button>
         </div>
       </section>
@@ -191,7 +191,7 @@
     </main>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=8"></script>
   
   <!-- PWA Offline Service Worker Registration -->
   <script>
