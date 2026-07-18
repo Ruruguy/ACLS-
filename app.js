@@ -30,9 +30,12 @@ const CPR_MODES = {
   '30:2': { limit: 30, type: 'ratio' },
   '15:2': { limit: 15, type: 'ratio' },
   'CONT': { limit: 0, type: 'cont' },
-  'LUCAS': { limit: 12, type: 'lucas' }, // Breath every 12 ticks (6s) at 120bpm
+  'LUCAS': { limit: 11, type: 'lucas' }, // About 6 seconds at 110 BPM
   'ROSC': { limit: 0, type: 'rosc' }
 };
+
+const METRONOME_BPM = 110;
+const METRONOME_INTERVAL_MS = 60000 / METRONOME_BPM;
 
 // === 1. Launch & Core Audio Hook ===
 function startApp() {
@@ -264,11 +267,13 @@ function playOscillatorTone(frequency, durationMs) {
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
   
-  osc.type = 'square'; // Identical square wave sound to target app
+  // A pure sine wave avoids the extra harmonics of a square wave, which can
+  // sound like two overlapping clicks on phone speakers.
+  osc.type = 'sine';
   osc.frequency.setValueAtTime(frequency, audioCtx.currentTime);
   
   // Set volume envelope
-  gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+  gain.gain.setValueAtTime(0.32, audioCtx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + (durationMs / 1000));
   
   osc.connect(gain);
@@ -302,13 +307,7 @@ function startCPRCycleTimer() {
     cprCountdownLeft--;
     updateCPRTimerReadout();
 
-    // Visual & audio tick warnings at <= 20 seconds
-    if (cprCountdownLeft <= 20 && cprCountdownLeft > 0) {
-      playOscillatorTone(800, 150); // Small rhythm prompt tone
-    }
-
     if (cprCountdownLeft <= 0) {
-      playOscillatorTone(2000, 1000); // 2 min warning alarm
       cprCountdownLeft = 120;
       logAction('兩分鐘循環結束 (Cycle Finished)', 'end');
     }
@@ -341,7 +340,7 @@ function startMetronomeTickLoop() {
   if (metronomeInterval) clearInterval(metronomeInterval);
   if (!isMetronomeRunning) return;
 
-  // 120 bpm = tick every 500ms
+  // One consistent compression beat at 110 BPM (~545ms per beat).
   metronomeInterval = setInterval(() => {
     if (isBreathPaused || activeCPRMode === 'ROSC') return;
 
@@ -361,7 +360,7 @@ function startMetronomeTickLoop() {
       playMetronomeCompressionBeep();
       
       const remainTicks = rule.limit - metronomeBeatCount;
-      const remainSeconds = Math.ceil(remainTicks / 2);
+      const remainSeconds = Math.ceil((remainTicks * METRONOME_INTERVAL_MS) / 1000);
       document.getElementById('cpr-breath-hint').innerText = `倒數: ${remainSeconds}s`;
 
       const percent = (metronomeBeatCount / rule.limit) * 100;
@@ -388,11 +387,11 @@ function startMetronomeTickLoop() {
       triggerSynchronousBreathsSequence();
     }
 
-  }, 500);
+  }, METRONOME_INTERVAL_MS);
 }
 
 function playMetronomeCompressionBeep() {
-  playOscillatorTone(3300, 50); // Crisp 3300Hz quick click
+  playOscillatorTone(1800, 45);
   triggerCardTickFlash();
 }
 
@@ -414,12 +413,10 @@ function triggerSynchronousBreathsSequence() {
   setRingCirclePercentOffset(100);
 
   // First Breath
-  playOscillatorTone(1000, 800); // 1000Hz long breath sound
   triggerVisualFlashOverlay('breath');
 
   setTimeout(() => {
     // Second Breath
-    playOscillatorTone(1000, 800);
     triggerVisualFlashOverlay('breath');
   }, 1200);
 
@@ -453,7 +450,6 @@ function triggerVisualFlashOverlay(type) {
 // Asynchronous background breathing flash
 function triggerBreathAlertSequence(isAsynchronous = false) {
   if (isAsynchronous) {
-    playOscillatorTone(1000, 800);
     triggerVisualFlashOverlay('breath');
     setTimeout(() => {
       setRingCirclePercentOffset(0);
@@ -598,7 +594,6 @@ function administerEpinephrine() {
       clearInterval(epinephrineInterval);
       timerLabel.innerText = '請立即給藥';
       speakText('給藥');
-      playOscillatorTone(1500, 500); // Admin alarm prompt
       btn.classList.add('epi-alert'); // Triggers green pulsating glowing animation
     }
   }, 1000);

@@ -1,9 +1,9 @@
-const CACHE_NAME = 'cpr-assistant-v8';
+const CACHE_NAME = 'cpr-assistant-v10';
 const ASSETS = [
   './',
   './index.html',
-  './styles.css?v=8',
-  './app.js?v=8',
+  './styles.css?v=10',
+  './app.js?v=10',
   './manifest.json',
   './d0c65ba4-4bd4-41bd-ab4d-e1063726e894.png'
 ];
