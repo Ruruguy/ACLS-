@@ -61,7 +61,9 @@ test('medicine transliterations preserve explicit doses and do not invent missin
     assert.equal(e.recognize(phrase), '語音指令: Amiodarone（劑量未註明）');
     assert.equal(e.records.at(-1).text, 'Amiodarone（劑量未註明）');
   }
-  assert.equal(e.recognize('艾皮奈弗林完成'), '語音指令: Epinephrine 1mg');
+  for (const phrase of ['EPI 完成', '艾皮奈弗林完成', '伊匹餒fin完成', '伊匹餒 FIN 完成']) {
+    assert.equal(e.recognize(phrase), '語音指令: Epinephrine 1mg');
+  }
   assert.equal(e.recognize('萊多卡因完成'), '語音指令: Lidocaine');
   assert.equal(e.recognize('阿托平完成'), '語音指令: Atropine 1mg');
   assert.equal(e.recognize('阿登諾辛完成'), '語音指令: Adenosine');
@@ -74,7 +76,7 @@ test('rhythm and ROSC pronunciation variants still require their command prefix'
   assert.equal(e.recognize('紀錄心律薇欸夫'), '語音指令: 心律 VF');
   assert.equal(e.recognize('紀錄心律皮薇踢'), '語音指令: 心律 pVT');
   assert.equal(e.recognize('紀錄心律艾斯薇踢'), '語音指令: 心律 SVT');
-  for (const text of ['en豆', '恩豆', '艾爾瑪', '阿米歐達隆', '薇欸夫', '肉斯克', '給藥完成', '欸西斯托利', '紀錄心律薇', '阿米歐250完成']) {
+  for (const text of ['en豆', '恩豆', '艾爾瑪', '阿米歐達隆', '伊匹餒fin', '薇欸夫', '肉斯克', '給藥完成', '欸西斯托利', '紀錄心律薇', '阿米歐250完成']) {
     assert.equal(e.recognize(text), undefined, text);
     assert.equal(e.records.length, 0, text);
   }
