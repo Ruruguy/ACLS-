@@ -223,6 +223,7 @@ const VOICE_COMMANDS = [
   { label: 'Epinephrine 1mg', phrases: ['EPINEPHRINE完成', '腎上腺素完成', '腎上腺素一毫克完成', '強心針完成'], action: administerEpinephrine },
   { label: 'Amio 300mg', phrases: ['AMIO三百完成', 'AMIO300完成', 'AMIODARONE三百完成', '胺碘酮三百完成'], action: () => logVoiceRecord('Amio 300mg', 'drug') },
   { label: 'Amio 150mg', phrases: ['AMIO一百五完成', 'AMIO150完成', 'AMIODARONE一百五完成', '胺碘酮一百五完成'], action: () => logVoiceRecord('Amio 150mg', 'drug') },
+  { label: 'Amiodarone（劑量未註明）', phrases: ['AMIODARONE完成'], action: () => logVoiceRecord('Amiodarone（劑量未註明）', 'drug') },
   { label: 'Lidocaine', phrases: ['LIDOCAINE完成', '利多卡因完成'], action: () => logVoiceRecord('Lidocaine', 'drug') },
   { label: 'Atropine 1mg', phrases: ['ATROPINE完成', '阿托品完成', '阿托品一毫克完成'], action: () => logVoiceRecord('Atropine 1mg', 'drug') },
   { label: 'Adenosine', phrases: ['ADENOSINE完成', '腺苷完成'], action: () => logVoiceRecord('Adenosine', 'drug') },
@@ -269,7 +270,7 @@ function openVoiceGuide() {
   const container = document.getElementById('voice-guide-commands');
   if (!dialog || !container) return;
   container.replaceChildren();
-  const drugLabels = new Set(['Epinephrine 1mg', 'Amio 300mg', 'Amio 150mg', 'Lidocaine', 'Atropine 1mg', 'Adenosine']);
+  const drugLabels = new Set(['Epinephrine 1mg', 'Amio 300mg', 'Amio 150mg', 'Amiodarone（劑量未註明）', 'Lidocaine', 'Atropine 1mg', 'Adenosine']);
   const groupFor = label => {
     if (label.startsWith('心律 ')) return '心律紀錄';
     if (drugLabels.has(label)) return '給藥紀錄';
