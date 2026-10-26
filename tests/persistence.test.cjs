@@ -162,3 +162,32 @@ test('marking recovered report completed uses last event time, not current time'
   await e.manager.showTab('stats');
   assert.match(e.element('report-content').innerHTML, /總電擊次數/);
 });
+
+test('case-level shock and airway counts deduplicate events and exclude voice/incomplete records', async () => {
+  const e = environment();
+  const a = report('case-airway-a', 3, 'completed');
+  const event = (category, text) => ({ timestamp: a.endedAt, category, text });
+  a.timeline.push(event('lma', '建立進階呼吸道 (LMA)'), event('lma', '建立進階呼吸道 (LMA)'), event('endo', '建立確切呼吸道 (ENDO)'));
+  a.timeline.push(event('voice', '語音指令: ENDO 確切呼吸道'), event('voice', '語音指令: AED 電擊'));
+  const b = report('case-airway-b', 0, 'completed');
+  b.timeline.push(event('endo', '建立確切呼吸道 (ENDO)'));
+  const legacy = report('case-airway-legacy', 0, 'completed');
+  legacy.timeline.push(event('dark-green', '建立進階呼吸道 (Endo/LMA)'));
+  for (const item of [a, b, legacy, report('case-incomplete', 7)]) await e.manager.saveSnapshot(item);
+  await e.manager.showTab('stats');
+  const html = e.element('report-content').innerHTML;
+  assert.match(html, /總電擊次數<\/span><strong>3<\/strong>/);
+  assert.match(html, /有電擊的個案數<\/span><strong>1 件<\/strong>/);
+  assert.match(html, /LMA 進階呼吸道個案數<\/span><strong>1 件<\/strong>/);
+  assert.match(html, /ENDO 確切呼吸道個案數<\/span><strong>2 件<\/strong>/);
+  assert.match(html, /舊版未區分的呼吸道個案 1 件/);
+  assert.match(e.manager.reportToText(a), /LMA 進階呼吸道: 有紀錄\nENDO 確切呼吸道: 有紀錄/);
+  await e.manager.openHistory();
+  e.manager.openCase(legacy.id);
+  const legacyEvent = e.shared.records.get(legacy.id).timeline[0];
+  e.manager.updateEvent(legacyEvent.id, 'category', 'endo');
+  await e.manager.saveCurrent();
+  await e.manager.showTab('stats');
+  assert.match(e.element('report-content').innerHTML, /ENDO 確切呼吸道個案數<\/span><strong>3 件<\/strong>/);
+  assert.match(e.element('report-content').innerHTML, /舊版未區分的呼吸道個案 0 件/);
+});

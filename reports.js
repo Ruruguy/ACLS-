@@ -6,7 +6,8 @@ const ReportManager = (() => {
   const JOURNAL_PREFIX = 'acls-pending-case:';
   const CATEGORY_LABELS = {
     '': '一般', type: '處置', drug: '給藥', shock: '電擊', ecg: '心律',
-    rosc: 'ROSC', voice: '語音', end: '系統', 'dark-green': '管路／呼吸道'
+    rosc: 'ROSC', voice: '語音', end: '系統', 'dark-green': '管路／呼吸道',
+    lma: 'LMA 進階呼吸道', endo: 'ENDO 確切呼吸道'
   };
 
   let dbPromise = null;
@@ -203,6 +204,9 @@ const ReportManager = (() => {
       patientType: typeMatch ? typeMatch[1].toUpperCase() : '未記錄',
       rosc: clinical.some(item => item.category === 'rosc' && /恢復自發循環|ROSC/i.test(item.text)),
       shocks: clinical.filter(item => item.category === 'shock' && /電擊/.test(item.text)).length,
+      lma: clinical.some(item => item.category === 'lma'),
+      endo: clinical.some(item => item.category === 'endo'),
+      unspecifiedAirway: clinical.some(item => !['lma', 'endo'].includes(item.category) && /建立進階呼吸道\s*\(Endo\/LMA\)/i.test(item.text)),
       epinephrine: clinical.filter(item => item.category === 'drug' && /給予 Epinephrine 1mg/i.test(item.text)).length,
       durationSeconds: Math.max(0, (new Date(report.endedAt) - new Date(report.startedAt)) / 1000),
       events: clinical.length
@@ -281,8 +285,11 @@ const ReportManager = (() => {
         <div class="summary-card"><span>患者類別</span><strong>${summary.patientType}</strong></div>
         <div class="summary-card"><span>結果</span><strong class="${summary.rosc ? 'text-green' : ''}">${summary.rosc ? 'ROSC' : '未記錄 ROSC'}</strong></div>
         <div class="summary-card"><span>電擊次數</span><strong>${summary.shocks}</strong></div>
+        <div class="summary-card"><span>LMA 進階呼吸道</span><strong>${summary.lma ? '有紀錄' : '未記錄'}</strong></div>
+        <div class="summary-card"><span>ENDO 確切呼吸道</span><strong>${summary.endo ? '有紀錄' : '未記錄'}</strong></div>
         <div class="summary-card"><span>Epinephrine</span><strong>${summary.epinephrine} 劑</strong></div>
       </section>
+      ${summary.unspecifiedAirway ? '<p class="storage-note">舊版合併呼吸道紀錄未區分 Endo／LMA，暫不計入兩者個案數；請核對後將該項分類改為 LMA 或 ENDO。</p>' : ''}
 
       <section class="report-section">
         <div class="report-section-title"><h3>時間軸處置項目</h3><span>可修改時間、分類與內容</span></div>
@@ -369,6 +376,10 @@ const ReportManager = (() => {
     const ihca = summaries.filter(item => item.patientType === 'IHCA').length;
     const unknown = total - ohca - ihca;
     const shocks = summaries.reduce((sum, item) => sum + item.shocks, 0);
+    const shockedCases = summaries.filter(item => item.shocks > 0).length;
+    const lmaCases = summaries.filter(item => item.lma).length;
+    const endoCases = summaries.filter(item => item.endo).length;
+    const unspecifiedAirwayCases = summaries.filter(item => item.unspecifiedAirway).length;
     const epi = summaries.reduce((sum, item) => sum + item.epinephrine, 0);
     const avgDuration = summaries.reduce((sum, item) => sum + item.durationSeconds, 0) / total;
     const percentage = total ? Math.round((roscCount / total) * 100) : 0;
@@ -381,10 +392,13 @@ const ReportManager = (() => {
         <div class="stat-card"><span>IHCA</span><strong>${ihca}</strong></div>
         <div class="stat-card"><span>類別未記錄</span><strong>${unknown}</strong></div>
         <div class="stat-card"><span>總電擊次數</span><strong>${shocks}</strong></div>
+        <div class="stat-card"><span>有電擊的個案數</span><strong>${shockedCases} 件</strong></div>
+        <div class="stat-card"><span>LMA 進階呼吸道個案數</span><strong>${lmaCases} 件</strong></div>
+        <div class="stat-card"><span>ENDO 確切呼吸道個案數</span><strong>${endoCases} 件</strong></div>
         <div class="stat-card"><span>Epinephrine 總劑數</span><strong>${epi}</strong></div>
         <div class="stat-card"><span>平均任務時間</span><strong>${escapeHtml(formatDuration(avgDuration))}</strong></div>
       </section>
-      <p class="storage-note">統計會依編輯後的最新時間軸重新計算；語音指令確認紀錄不會重複計入臨床事件。</p>`;
+      <p class="storage-note">統計會依編輯後的最新時間軸重新計算；語音指令確認紀錄不會重複計入臨床事件。同一個案多次電擊、LMA 或 ENDO 各只計為一件；同案有 LMA 與 ENDO 時，兩項各計一件。舊版未區分的呼吸道個案 ${unspecifiedAirwayCases} 件，暫不歸入 LMA／ENDO。</p>`;
   }
 
   async function saveAndOpen(report) {
@@ -513,6 +527,8 @@ const ReportManager = (() => {
     text += `任務結束: ${formatDateTime(report.endedAt)}\n任務時間: ${formatDuration(summary.durationSeconds)}\n`;
     text += `患者類別: ${summary.patientType}\n結果: ${summary.rosc ? 'ROSC' : '未記錄 ROSC'}\n`;
     text += `電擊次數: ${summary.shocks}\nEpinephrine: ${summary.epinephrine} 劑\n`;
+    text += `LMA 進階呼吸道: ${summary.lma ? '有紀錄' : '未記錄'}\nENDO 確切呼吸道: ${summary.endo ? '有紀錄' : '未記錄'}\n`;
+    if (summary.unspecifiedAirway) text += '含舊版未區分 Endo/LMA 的呼吸道紀錄，請核對分類。\n';
     text += '===================================\n\n';
     report.timeline.slice().sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).forEach(item => {
       text += `[${new Date(item.timestamp).toLocaleTimeString('zh-TW', { hour12: false })}] ${item.text}\n`;

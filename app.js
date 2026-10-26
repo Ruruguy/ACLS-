@@ -238,7 +238,8 @@ const VOICE_COMMANDS = [
 
   // 處置與現場時間戳。
   { label: '建立 IV/IO', phrases: ['建立IVIO完成', 'IVIO完成', '靜脈骨內管路完成'], action: () => logVoiceRecord('建立 IV/IO', 'drug') },
-  { label: '建立進階呼吸道', phrases: ['進階呼吸道完成', '氣管插管完成', '插管完成', 'LMA完成'], action: () => logVoiceRecord('建立進階呼吸道 (Endo/LMA)', 'drug') },
+  { label: 'LMA 進階呼吸道', phrases: ['LMA完成', '進階呼吸道完成', '喉罩完成'], action: () => recordAirway('LMA') },
+  { label: 'ENDO 確切呼吸道', phrases: ['ENDO完成', '確切呼吸道完成', '氣管插管完成', '插管完成'], action: () => recordAirway('ENDO') },
   { label: 'BVM 給氧', phrases: ['BVM給氧完成', '球囊面罩給氧完成', '給氧完成'], action: () => logVoiceRecord('BVM / 給氧處置完成') },
   { label: '胸外按壓換手', phrases: ['胸外按壓換手完成', '按壓換手完成', '換手完成'], action: () => logVoiceRecord('胸外按壓換手') },
   { label: '脈搏檢查', phrases: ['脈搏檢查完成', '檢查脈搏完成'], action: () => logVoiceRecord('脈搏檢查完成') },
@@ -607,12 +608,18 @@ function administerEpinephrine() {
 }
 
 // === 7. Logging & TXT Export System ===
+function recordAirway(device) {
+  if (!missionActive) return;
+  if (device === 'LMA') logAction('建立進階呼吸道 (LMA)', 'lma');
+  if (device === 'ENDO') logAction('建立確切呼吸道 (ENDO)', 'endo');
+}
+
 function logAction(text, category = '') {
   const container = document.getElementById('logs-container');
   const entry = document.createElement('div');
   
   let finalCategory = category;
-  if (text.includes('建立 IV/IO') || text.includes('建立IV/IO') || text.includes('建立進階呼吸道')) {
+  if (!['lma', 'endo'].includes(category) && (text.includes('建立 IV/IO') || text.includes('建立IV/IO') || text.includes('建立進階呼吸道'))) {
     finalCategory = 'dark-green';
   }
   entry.className = `log-entry ${finalCategory}`;

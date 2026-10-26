@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-title" content="救護助手">
   
   <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="styles.css?v=16">
+  <link rel="stylesheet" href="styles.css?v=17">
 </head>
 <body>
 
@@ -158,7 +158,8 @@
           <button class="btn-action" onclick="logAction('Adenosine', 'drug')">Adenosine</button>
           <button class="btn-action" onclick="logAction('建立 IV/IO', 'drug')">建立 IV/IO</button>
           
-          <button class="btn-action btn-action-primary" onclick="logAction('建立進階呼吸道 (Endo/LMA)', 'drug')">建立進階呼吸道 (Endo/LMA)</button>
+          <button class="btn-action btn-airway" onclick="recordAirway('LMA')">LMA 進階呼吸道</button>
+          <button class="btn-action btn-airway" onclick="recordAirway('ENDO')">ENDO 確切呼吸道</button>
           <button class="btn-action" onclick="logAction('患者類別: OHCA', 'type')">OHCA</button>
           <button class="btn-action" onclick="logAction('患者類別: IHCA', 'type')">IHCA</button>
           
@@ -230,8 +231,8 @@
     <form method="dialog"><button class="report-btn primary">我知道了</button></form>
   </dialog>
 
-  <script src="reports.js?v=16"></script>
-  <script src="app.js?v=16"></script>
+  <script src="reports.js?v=17"></script>
+  <script src="app.js?v=17"></script>
   
   <!-- PWA Offline Service Worker Registration -->
   <script>

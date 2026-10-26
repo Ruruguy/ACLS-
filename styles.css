@@ -664,6 +664,8 @@ header {
 .log-entry.rosc .log-msg { color: var(--color-green); font-weight: 800; }
 .log-entry.ecg .log-msg { color: var(--color-yellow); font-weight: 700; }
 .log-entry.dark-green .log-msg { color: #248a3d; font-weight: 800; }
+.log-entry.lma .log-msg, .log-entry.endo .log-msg { color: #41d17d; font-weight: 800; }
+.btn-airway { border-color: #41d17d; color: #80e5a6; }
 .log-entry.voice .log-msg { color: #af52de; font-weight: 700; }
 .log-entry.end .log-msg { color: var(--ios-text-secondary); font-style: italic; font-weight: bold; }
 
