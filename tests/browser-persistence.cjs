@@ -113,8 +113,67 @@ const root = path.resolve(__dirname, '..');
     await visitor.getByRole('button', { name: '歷史個案與統計', exact: true }).click();
     await visitor.getByRole('heading', { name: '沒有符合的紀錄' }).waitFor();
     assert.equal(await visitor.locator('.history-card').count(), 0);
+    // A second independent case exercises repeated ROSC -> CPR transitions.
+    const relapseContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const relapse = await relapseContext.newPage();
+    relapse.on('pageerror', error => errors.push(error.message));
+    await relapse.goto(base);
+    await relapse.getByRole('button', { name: '啟動急救流程', exact: true }).click();
+    await relapse.getByRole('button', { name: '15:2', exact: true }).click();
+    await relapse.locator('#btn-epinephrine').click();
+    const original = await relapse.evaluate(() => ({ id: missionId, start: startTime.toISOString(), epiTimer: epinephrineInterval }));
+    for (const route of ['OHCA', 'IHCA', 'voice-IHCA', 'resume-button', 'voice-resume', 'mode-button']) {
+      await relapse.getByRole('button', { name: 'ROSC 恢復自發循環', exact: true }).click();
+      assert.deepEqual(await relapse.evaluate(() => ({ mode: activeCPRMode, running: isMetronomeRunning, paused: cprTimerInterval === null })), { mode: 'ROSC', running: false, paused: true });
+      assert.equal(await relapse.locator('#btn-resume-cpr').isVisible(), true);
+      if (route === 'voice-IHCA') await relapse.evaluate(() => processSpeechTranscript('紀錄 IHCA'));
+      else if (route === 'voice-resume') await relapse.evaluate(() => processSpeechTranscript('再次急救'));
+      else if (route === 'resume-button') await relapse.locator('#btn-resume-cpr').click();
+      else if (route === 'mode-button') await relapse.getByRole('button', { name: '30:2', exact: true }).click();
+      else await relapse.getByRole('button', { name: route, exact: true }).click();
+      const resumed = await relapse.evaluate(() => ({
+        id: missionId, start: startTime.toISOString(), epiTimer: epinephrineInterval,
+        mode: activeCPRMode, running: isMetronomeRunning,
+        cycle: cprCountdownLeft, counting: cprTimerInterval !== null,
+        epiDoses: missionLogs.filter(item => item.text === '給予 Epinephrine 1mg').length
+      }));
+      assert.equal(resumed.id, original.id);
+      assert.equal(resumed.start, original.start);
+      assert.equal(resumed.epiTimer, original.epiTimer);
+      assert.equal(resumed.epiDoses, 1);
+      assert.equal(resumed.mode, route === 'mode-button' ? '30:2' : '15:2');
+      assert.equal(resumed.running, true);
+      assert.equal(resumed.counting, true);
+      assert.ok(resumed.cycle >= 119 && resumed.cycle <= 120);
+      assert.equal(await relapse.locator('#btn-resume-cpr').isVisible(), false);
+      await relapse.waitForFunction(() => metronomeBeatCount > 0);
+    }
+    // A queued second breath from before ROSC must not fire in the new cycle.
+    await relapse.evaluate(() => {
+      window.breathAlerts = 0;
+      const originalOverlay = triggerVisualFlashOverlay;
+      triggerVisualFlashOverlay = type => { if (type === 'breath') window.breathAlerts++; originalOverlay(type); };
+      triggerSynchronousBreathsSequence();
+      triggerROSCState();
+      recordPatientType('OHCA');
+    });
+    await relapse.waitForTimeout(1400);
+    assert.equal(await relapse.evaluate(() => window.breathAlerts), 1);
+    assert.equal(await relapse.evaluate(() => missionLogs.filter(item => item.text === '再次急救 (CPR Resumed)').length), 7);
+    await relapse.getByRole('button', { name: '結束任務', exact: true }).click();
+    await relapse.getByRole('dialog', { name: '個案結束報告', exact: true }).waitFor();
+    assert.equal(await relapse.locator('#btn-resume-cpr').isEnabled(), false);
+    const finalCaseId = await relapse.evaluate(() => missionId);
+    await relapse.reload();
+    await relapse.getByRole('button', { name: '歷史個案與統計', exact: true }).click();
+    await relapse.locator('.history-card').waitFor();
+    assert.equal(await relapse.locator('.history-card').count(), 1);
+    await relapse.locator('.history-card').click();
+    assert.equal(await relapse.locator('.timeline-text').evaluateAll(elements => elements.filter(el => el.value === '再次急救 (CPR Resumed)').length), 7);
+    assert.ok(finalCaseId);
+    await relapseContext.close();
     assert.deepEqual(errors, []);
-    console.log('PASS: close/reopen, unfinished recovery, completion, deletion, backup/restore, visitor isolation, mobile UI, no page errors');
+    console.log('PASS: persistence, backup/restore, visitor isolation, mobile UI, repeated ROSC -> CPR via buttons/voice, timer continuity, stale breath cancellation, no page errors');
     await isolated.close();
     await context.close();
   } finally {

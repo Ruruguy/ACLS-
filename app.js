@@ -8,6 +8,8 @@ let epinephrineInterval = null;
 let startTime = null;
 let cprCountdownLeft = 120; // 2 minutes in seconds
 let activeCPRMode = '30:2'; // Default mode
+let lastCPRMode = '30:2';
+let cprCueGeneration = 0;
 let metronomeBeatCount = 0;
 let isMetronomeRunning = true;
 let isBreathPaused = false;
@@ -258,6 +260,7 @@ const VOICE_COMMANDS = expandVoiceCommandPhrases([
 
   // CPR 與系統控制。
   { label: 'ROSC', phrases: ['確認恢復自發循環', '恢復自發循環', '確認ROSC'], action: triggerROSCState },
+  { label: '再次急救', phrases: ['再次急救', '恢復CPR', '重新開始CPR'], action: resumeCPR },
   { label: '30:2 模式', phrases: ['三十比二', '30比2'], action: () => setCPRMode('30:2') },
   { label: '15:2 模式', phrases: ['十五比二', '15比2'], action: () => setCPRMode('15:2') },
   { label: '連續按壓模式', phrases: ['切換連續按壓', '連續按壓模式'], action: () => setCPRMode('CONT') },
@@ -274,8 +277,8 @@ const VOICE_COMMANDS = expandVoiceCommandPhrases([
   { label: '脈搏檢查', phrases: ['脈搏檢查完成', '檢查脈搏完成'], action: () => logVoiceRecord('脈搏檢查完成') },
   { label: '貼妥電擊貼片', phrases: ['電擊貼片完成', 'AED貼片完成', '貼片完成'], action: () => logVoiceRecord('電擊貼片已貼妥') },
   { label: '5H5T 評估', phrases: ['5H5T完成', '五H五T完成', '5H5T評估完成'], action: () => logVoiceRecord('5H5T 評估') },
-  { label: 'OHCA', phrases: ['紀錄OHCA', '患者OHCA'], action: () => logVoiceRecord('患者類別: OHCA') },
-  { label: 'IHCA', phrases: ['紀錄IHCA', '患者IHCA'], action: () => logVoiceRecord('患者類別: IHCA') },
+  { label: 'OHCA', phrases: ['紀錄OHCA', '患者OHCA'], action: () => recordPatientType('OHCA') },
+  { label: 'IHCA', phrases: ['紀錄IHCA', '患者IHCA'], action: () => recordPatientType('IHCA') },
 
   // 心律紀錄：要求「紀錄／確認心律」前綴，降低一般討論造成的誤記。
   { label: '心律 VF', phrases: ['紀錄心律VF', '確認心律VF', '紀錄心室顫動'], action: () => logVoiceRecord('心律評估: VF', 'ecg') },
@@ -303,7 +306,7 @@ function openVoiceGuide() {
     if (label.startsWith('心律 ')) return '心律紀錄';
     if (drugLabels.has(label)) return '給藥紀錄';
     if (label === 'AED 電擊' || label === '手動電擊') return '電擊紀錄';
-    if (label === 'ROSC' || /模式|節拍器/.test(label)) return 'CPR、節拍器與 ROSC';
+    if (label === 'ROSC' || /模式|節拍器|再次急救/.test(label)) return 'CPR、節拍器與 ROSC';
     return '呼吸道與其他處置';
   };
   for (const title of ['CPR、節拍器與 ROSC', '電擊紀錄', '給藥紀錄', '呼吸道與其他處置', '心律紀錄']) {
@@ -488,6 +491,7 @@ function triggerCardTickFlash() {
 
 // 2 breaths at ratio compression pauses (30:2 or 15:2)
 function triggerSynchronousBreathsSequence() {
+  const generation = cprCueGeneration;
   // Clear ring circle offset
   setRingCirclePercentOffset(100);
 
@@ -495,13 +499,14 @@ function triggerSynchronousBreathsSequence() {
   triggerVisualFlashOverlay('breath');
 
   setTimeout(() => {
+    if (!missionActive || generation !== cprCueGeneration) return;
     // Second Breath
     triggerVisualFlashOverlay('breath');
   }, 1200);
 
   // Resume Chest Compressions after 2 breaths complete (~2.4s)
   setTimeout(() => {
-    if (!missionActive) return;
+    if (!missionActive || generation !== cprCueGeneration) return;
     isBreathPaused = false;
     setRingCirclePercentOffset(0);
     document.getElementById('cpr-breath-hint').innerText = '準備中...';
@@ -529,8 +534,10 @@ function triggerVisualFlashOverlay(type) {
 // Asynchronous background breathing flash
 function triggerBreathAlertSequence(isAsynchronous = false) {
   if (isAsynchronous) {
+    const generation = cprCueGeneration;
     triggerVisualFlashOverlay('breath');
     setTimeout(() => {
+      if (!missionActive || generation !== cprCueGeneration) return;
       setRingCirclePercentOffset(0);
     }, 200);
   }
@@ -544,6 +551,7 @@ function toggleMetronome() {
 function setMetronomeRunning(shouldRun) {
   if (!missionActive) return;
   if (isMetronomeRunning === shouldRun && metronomeInterval) return;
+  cprCueGeneration++;
   isMetronomeRunning = shouldRun;
   const btn = document.getElementById('btn-toggle-metronome');
   
@@ -557,19 +565,24 @@ function setMetronomeRunning(shouldRun) {
     btn.classList.remove('active');
     btn.querySelector('span').innerText = '節拍器：關';
     if (metronomeInterval) clearInterval(metronomeInterval);
+    metronomeInterval = null;
     setRingCirclePercentOffset(0);
     document.getElementById('cpr-breath-hint').innerText = '準備中...';
   }
 }
 
 function setCPRMode(modeName) {
-  if (!missionActive) return;
+  if (!missionActive || !CPR_MODES[modeName] || modeName === 'ROSC') return;
+  const resuming = activeCPRMode === 'ROSC';
+  cprCueGeneration++;
   // Clear active classes
   document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
   document.getElementById('btn-rosc-trigger').classList.remove('active');
+  document.getElementById('btn-resume-cpr').hidden = true;
 
   const rule = CPR_MODES[modeName];
   activeCPRMode = modeName;
+  lastCPRMode = modeName;
   metronomeBeatCount = 0;
   isBreathPaused = false;
   setRingCirclePercentOffset(0);
@@ -591,14 +604,35 @@ function setCPRMode(modeName) {
   }
 
   document.getElementById('cpr-status-label').innerText = statusText;
-  if (isMetronomeRunning) startMetronomeTickLoop();
+  if (resuming) {
+    startCPRCycleTimer();
+    setMetronomeRunning(true);
+    logAction('再次急救 (CPR Resumed)', 'type');
+  } else if (isMetronomeRunning) startMetronomeTickLoop();
   logAction(`模式切換: ${logText}`);
+}
+
+function resumeCPR() {
+  if (!missionActive || activeCPRMode !== 'ROSC') return;
+  setCPRMode(lastCPRMode);
+}
+
+function recordPatientType(type) {
+  if (!missionActive || !['OHCA', 'IHCA'].includes(type)) return;
+  logAction(`患者類別: ${type}`, 'type');
+  if (activeCPRMode === 'ROSC') resumeCPR();
 }
 
 function triggerROSCState() {
   if (!missionActive) return;
+  if (activeCPRMode !== 'ROSC') lastCPRMode = activeCPRMode;
+  cprCueGeneration++;
+  setMetronomeRunning(false);
+  if (cprTimerInterval) clearInterval(cprTimerInterval);
+  cprTimerInterval = null;
   document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
   document.getElementById('btn-rosc-trigger').classList.add('active');
+  document.getElementById('btn-resume-cpr').hidden = false;
 
   activeCPRMode = 'ROSC';
   isBreathPaused = false;
@@ -768,6 +802,7 @@ function isCurrentMissionActive(id) {
 
 function endResuscitationMission() {
   if (!missionActive) return;
+  cprCueGeneration++;
   missionEndTime = new Date();
   missionActive = false;
   // Clear all running intervals

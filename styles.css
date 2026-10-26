@@ -666,6 +666,8 @@ header {
 .log-entry.dark-green .log-msg { color: #248a3d; font-weight: 800; }
 .log-entry.lma .log-msg, .log-entry.endo .log-msg { color: #41d17d; font-weight: 800; }
 .btn-airway { border-color: #41d17d; color: #80e5a6; }
+#btn-resume-cpr[hidden] { display: none; }
+.btn-resume-cpr { grid-column: span 2; border: 2px solid var(--color-red); background: #401b20; color: #fff; min-height: 60px; font-size: 1rem; }
 .log-entry.voice .log-msg { color: #af52de; font-weight: 700; }
 .log-entry.end .log-msg { color: var(--ios-text-secondary); font-style: italic; font-weight: bold; }
 

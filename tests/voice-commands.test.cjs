@@ -11,6 +11,7 @@ function speechEnvironment() {
     document: { getElementById: () => ({ textContent: '' }) },
     logAction: (text, category) => records.push({ text, category }),
     triggerManualShock() {}, triggerAEDShock() {}, administerEpinephrine() {}, triggerROSCState() {},
+    resumeCPR() {}, recordPatientType() {},
     setCPRMode() {}, setMetronomeRunning() {},
     recordAirway: device => records.push({ text: `airway:${device}` })
   });
