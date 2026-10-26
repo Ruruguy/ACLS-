@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-title" content="救護助手">
   
   <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="styles.css?v=17">
+  <link rel="stylesheet" href="styles.css?v=18">
 </head>
 <body>
 
@@ -29,6 +29,7 @@
     <p class="splash-subtitle">emergency</p>
     <button id="btn-start-flow" class="start-btn" onclick="startApp()">啟動急救流程</button>
     <button class="history-entry-btn" onclick="ReportManager.openHistory()">歷史個案與統計</button>
+    <button class="history-entry-btn" onclick="openVoiceGuide()">語音指令說明</button>
     <button id="recovery-notice" class="history-entry-btn" hidden onclick="ReportManager.openHistory()"></button>
     <p class="local-storage-hint">紀錄只保存在自己的裝置，不會上傳</p>
     <div class="splash-footer">
@@ -51,6 +52,7 @@
         </div>
       </div>
       <div style="display: flex; align-items: center; gap: 8px;">
+        <button class="btn-header-guide" onclick="openVoiceGuide()" title="查看語音指令說明">語音指令</button>
         <button class="btn-header-history" onclick="ReportManager.openHistory()" title="查看歷史個案與統計">歷史／統計</button>
         <button id="btn-mic-toggle" class="btn-mic-toggle" onclick="toggleSpeechRecognition()" title="啟動語音辨識">
           <svg class="mic-icon" viewBox="0 0 24 24" fill="currentColor" style="width: 14px; height: 14px; display: block;">
@@ -231,8 +233,21 @@
     <form method="dialog"><button class="report-btn primary">我知道了</button></form>
   </dialog>
 
-  <script src="reports.js?v=17"></script>
-  <script src="app.js?v=17"></script>
+  <dialog id="voice-guide-dialog" class="voice-guide-dialog" aria-labelledby="voice-guide-title">
+    <div class="voice-guide-header">
+      <h2 id="voice-guide-title">語音操作指令</h2>
+      <form method="dialog"><button class="report-close-btn" aria-label="關閉語音指令">×</button></form>
+    </div>
+    <div class="voice-guide-content">
+      <p>先按「啟動急救流程」，允許麥克風，確認右上角顯示「語音：開」。一次說一個完整指令，說完請查看紀錄區，確認已出現語音指令及對應事件。</p>
+      <p class="voice-guide-highlight">LMA：「LMA 完成」或「進階呼吸道完成」。<br>ENDO：「ENDO 完成」、「確切呼吸道完成」或「氣管插管完成」。</p>
+      <p>手動電擊使用畫面當下選定的焦耳數；給藥須說出藥名，單說「給藥完成」無法觸發。啟動流程、結束任務、選擇焦耳數、匯出及刪除紀錄須使用畫面操作。</p>
+      <div id="voice-guide-commands"></div>
+    </div>
+  </dialog>
+
+  <script src="reports.js?v=18"></script>
+  <script src="app.js?v=18"></script>
   
   <!-- PWA Offline Service Worker Registration -->
   <script>

@@ -263,6 +263,48 @@ const VOICE_COMMANDS = [
   { label: '心律 AVB', phrases: ['紀錄心律AVB', '確認房室傳導阻滯', '紀錄房室傳導阻滯'], action: () => logVoiceRecord('心律評估: AVB', 'ecg') }
 ];
 
+// Build the reference from the actual recognition phrases so it stays in sync.
+function openVoiceGuide() {
+  const dialog = document.getElementById('voice-guide-dialog');
+  const container = document.getElementById('voice-guide-commands');
+  if (!dialog || !container) return;
+  container.replaceChildren();
+  const drugLabels = new Set(['Epinephrine 1mg', 'Amio 300mg', 'Amio 150mg', 'Lidocaine', 'Atropine 1mg', 'Adenosine']);
+  const groupFor = label => {
+    if (label.startsWith('心律 ')) return '心律紀錄';
+    if (drugLabels.has(label)) return '給藥紀錄';
+    if (label === 'AED 電擊' || label === '手動電擊') return '電擊紀錄';
+    if (label === 'ROSC' || /模式|節拍器/.test(label)) return 'CPR、節拍器與 ROSC';
+    return '呼吸道與其他處置';
+  };
+  for (const title of ['CPR、節拍器與 ROSC', '電擊紀錄', '給藥紀錄', '呼吸道與其他處置', '心律紀錄']) {
+    const heading = document.createElement('h3');
+    heading.textContent = title;
+    const table = document.createElement('table');
+    table.className = 'voice-command-table';
+    const head = table.createTHead().insertRow();
+    for (const text of ['功能', '可說的指令']) {
+      const th = document.createElement('th');
+      th.scope = 'col';
+      th.textContent = text;
+      head.append(th);
+    }
+    const body = table.createTBody();
+    for (const command of VOICE_COMMANDS.filter(item => groupFor(item.label) === title)) {
+      const row = body.insertRow();
+      row.insertCell().textContent = command.label;
+      const phrases = row.insertCell();
+      for (const phrase of command.phrases) {
+        const line = document.createElement('div');
+        line.textContent = `「${phrase.replace(/IVIO/g, 'IV/IO')}」`;
+        phrases.append(line);
+      }
+    }
+    container.append(heading, table);
+  }
+  if (!dialog.open) dialog.showModal();
+}
+
 // Crisp beep oscillator sound generator (prevents clicking pops with exponential gain ramps)
 function playOscillatorTone(frequency, durationMs) {
   if (!audioCtx) return;

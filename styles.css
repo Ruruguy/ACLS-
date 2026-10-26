@@ -1188,6 +1188,20 @@ select:disabled {
    End report, historical case database, and statistics
    ========================================================== */
 .report-edit-fields { border: 0; padding: 0; min-width: 0; }
+.btn-header-guide { min-height: 34px; padding: 6px 10px; border: 1px solid #3a4b58; border-radius: 8px; background: #151f27; color: #d5e3ed; font-weight: 800; cursor: pointer; }
+.voice-guide-dialog { position: fixed; inset: 0; margin: auto; padding: 0; width: min(800px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); overflow-y: auto; border: 1px solid #497492; border-radius: 12px; background: var(--ios-card); color: var(--ios-text); }
+.voice-guide-dialog::backdrop { background: rgba(0, 0, 0, 0.8); }
+.voice-guide-header { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 18px; background: var(--ios-card); border-bottom: 1px solid #3a4b58; }
+.voice-guide-header h2 { font-size: 1.2rem; }
+.voice-guide-content { padding: 16px; }
+.voice-guide-content p { margin-bottom: 12px; font-size: 0.9rem; line-height: 1.7; }
+.voice-guide-content h3 { margin: 24px 0 10px; font-size: 1rem; color: #80e5a6; }
+.voice-guide-highlight { padding: 12px; border-left: 3px solid var(--color-green); background: #17242d; }
+.voice-command-table { width: 100%; border-collapse: collapse; font-size: 0.87rem; }
+.voice-command-table th, .voice-command-table td { text-align: left; vertical-align: top; padding: 10px; border: 1px solid #344652; line-height: 1.65; overflow-wrap: anywhere; }
+.voice-command-table th { background: #17242d; }
+.voice-command-table td:first-child { width: 34%; }
+@media (max-width: 760px) { .btn-header-guide { width: 38px; padding: 3px; font-size: 0.65rem; } .voice-guide-content { padding: 12px; } .voice-command-table th, .voice-command-table td { padding: 8px; } }
 .save-location-guide { border-color: #497492; }
 .save-location-guide h3 { font-size: 1rem; margin-bottom: 10px; }
 .save-location-guide p { font-size: 0.88rem; line-height: 1.7; margin-top: 8px; }
