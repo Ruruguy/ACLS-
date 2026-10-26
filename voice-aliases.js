@@ -5,7 +5,7 @@ const VOICE_PRONUNCIATIONS = {
   LMA: ['ELMA', 'EL EM A', '艾勒姆欸', '艾爾姆欸', '艾爾姆A', '艾爾瑪'],
   EPINEPHRINE: ['EPINEPHRIN', 'EPINEFRINE', 'EPINEFRIN', 'EPI', '艾皮奈弗林', '艾匹奈弗林'],
   AMIO: ['阿米歐', '阿咪歐', '艾米歐', '阿米喔'],
-  AMIODARONE: ['AMIODARON', 'AMIODERONE', '阿米歐達隆', '阿米歐達龍', '阿咪歐達隆', '艾米歐達隆', '阿米達隆'],
+  AMIODARONE: ['AMIODARON', 'AMIODERONE', '阿米歐達隆', '阿咪啊打龍', '阿米歐達龍', '阿咪歐達隆', '艾米歐達隆', '阿米達隆'],
   LIDOCAINE: ['LIDOCAIN', '萊多卡因', '賴多卡因', '利多凱因'],
   ATROPINE: ['ATROPIN', '阿托平', '阿脫品'],
   ADENOSINE: ['ADENOSIN', 'ADENOSENE', '阿登諾辛', '阿德諾辛', '阿丹諾辛', '亞登諾辛'],

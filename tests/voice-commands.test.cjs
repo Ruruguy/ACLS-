@@ -52,12 +52,12 @@ test('connected ENDO and LMA speech, transliterations, and spaced letters stay d
 
 test('medicine transliterations preserve explicit doses and do not invent missing doses', () => {
   const e = speechEnvironment();
-  for (const phrase of ['阿米歐達隆三百完成', 'amiodarone 300 完成', '阿米歐300完成']) {
+  for (const phrase of ['阿米歐達隆三百完成', '阿咪啊打龍三百完成', '阿咪啊打龍300完成', 'amiodarone 300 完成', '阿米歐300完成']) {
     assert.equal(e.recognize(phrase), '語音指令: Amio 300mg');
     assert.equal(e.records.at(-1).text, 'Amio 300mg');
   }
-  for (const phrase of ['阿米歐達隆一百五完成', 'amiodarone 150 完成']) assert.equal(e.recognize(phrase), '語音指令: Amio 150mg');
-  for (const phrase of ['阿米歐達隆完成', 'amiodaron 完成', '阿米歐完成']) {
+  for (const phrase of ['阿米歐達隆一百五完成', '阿咪啊打龍一百五完成', '阿咪啊打龍150完成', 'amiodarone 150 完成']) assert.equal(e.recognize(phrase), '語音指令: Amio 150mg');
+  for (const phrase of ['阿米歐達隆完成', '阿咪啊打龍完成', 'amiodaron 完成', '阿米歐完成']) {
     assert.equal(e.recognize(phrase), '語音指令: Amiodarone（劑量未註明）');
     assert.equal(e.records.at(-1).text, 'Amiodarone（劑量未註明）');
   }
