@@ -41,7 +41,11 @@ function expandVoiceCommandPhrases(commands) {
       const normalized = normalizeVoiceText(phrase);
       if (!phrases.has(normalized)) phrases.set(normalized, phrase);
     };
-    for (const original of command.phrases) {
+    const originals = command.phrases.flatMap(phrase => {
+      const match = /^([A-Za-z0-9]+)完成$/.exec(phrase);
+      return match ? [phrase, ...[' done', ' complete', ' completed'].map(ending => match[1] + ending)] : [phrase];
+    });
+    for (const original of originals) {
       add(original);
       for (const [token, variants] of Object.entries(VOICE_PRONUNCIATIONS)) {
         // Do not expand short acronyms inside longer English names (e.g. ST in ASYSTOLE).

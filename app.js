@@ -109,7 +109,8 @@ function initSpeechRecognition() {
   recognition = new SpeechRecognition();
   recognition.continuous = true;
   recognition.interimResults = false;
-  recognition.lang = 'zh-TW';
+  recognition.lang = document.getElementById('speech-language').value;
+  recognition.maxAlternatives = 3;
   
   recognition.onstart = () => {
     isListening = true;
@@ -134,9 +135,11 @@ function initSpeechRecognition() {
   
   recognition.onresult = (event) => {
     const resultIndex = event.resultIndex;
-    const transcript = event.results[resultIndex][0].transcript.trim();
-    console.log("Speech recognized:", transcript);
-    processSpeechTranscript(transcript);
+    for (let i = resultIndex; i < event.results.length; i++) {
+      const result = event.results[i];
+      if (!result.isFinal) continue;
+      processSpeechAlternatives(Array.from(result, alternative => alternative.transcript.trim()));
+    }
   };
 }
 
@@ -195,14 +198,43 @@ function updateMicUI(listening) {
   }
 }
 
-function processSpeechTranscript(transcript) {
+function setSpeechLanguage(language) {
+  if (!['zh-TW', 'en-US'].includes(language)) return;
+  try { localStorage.setItem('acls-speech-language', language); } catch (_) {}
+  document.getElementById('speech-feedback').textContent = language === 'en-US'
+    ? '英文辨識：例如 Amiodarone done、ENDO complete'
+    : '中文辨識：支援清單中的英文藥名及音譯';
+  if (recognition) {
+    recognition.lang = language;
+    if (speechRequested) {
+      if (speechRestartTimer) clearTimeout(speechRestartTimer);
+      try { recognition.stop(); } catch (_) { scheduleSpeechRecognitionRestart(); }
+    }
+  }
+}
+
+function findVoiceCommand(transcript) {
   // Remove punctuation/spaces and normalize English letters so phrases such as
   // "I V / I O" and "ivio" resolve to the same command.
   const cleanText = normalizeVoiceText(transcript);
-  const command = VOICE_COMMANDS.find(({ phrases }) =>
+  return VOICE_COMMANDS.find(({ phrases }) =>
     phrases.some(phrase => cleanText.includes(normalizeVoiceText(phrase)))
   );
+}
 
+function processSpeechAlternatives(transcripts) {
+  const feedback = document.getElementById('speech-feedback');
+  const topMatch = findVoiceCommand(transcripts[0] || '');
+  const candidates = new Map(transcripts.slice(1).map(findVoiceCommand).filter(Boolean).map(command => [command.label, command]));
+  const command = topMatch || (candidates.size === 1 ? candidates.values().next().value : null);
+  if (feedback) feedback.textContent = command ? `已辨識：${command.label}` : `未執行：${transcripts[0] || '未收到語音'}${candidates.size > 1 ? '（候選指令不同，請重說）' : '（請說完整指令）'}`;
+  if (!command) return;
+  logAction(`語音指令: ${command.label}`, 'voice');
+  command.action();
+}
+
+function processSpeechTranscript(transcript) {
+  const command = findVoiceCommand(transcript);
   if (!command) return;
   logAction(`語音指令: ${command.label}`, 'voice');
   command.action();
@@ -219,9 +251,7 @@ const VOICE_COMMANDS = expandVoiceCommandPhrases([
 
   // 給藥：必須包含藥名，避免「給藥完成」被誤記為特定藥物。
   { label: 'Epinephrine 1mg', phrases: ['EPINEPHRINE完成', '腎上腺素完成', '腎上腺素一毫克完成', '強心針完成'], action: administerEpinephrine },
-  { label: 'Amio 300mg', phrases: ['AMIO三百完成', 'AMIO300完成', 'AMIODARONE三百完成', 'AMIODARONE300完成', '胺碘酮三百完成'], action: () => logVoiceRecord('Amio 300mg', 'drug') },
-  { label: 'Amio 150mg', phrases: ['AMIO一百五完成', 'AMIO150完成', 'AMIODARONE一百五完成', 'AMIODARONE一百五十完成', 'AMIODARONE150完成', '胺碘酮一百五完成'], action: () => logVoiceRecord('Amio 150mg', 'drug') },
-  { label: 'Amiodarone（劑量未註明）', phrases: ['AMIODARONE完成', 'AMIO完成'], action: () => logVoiceRecord('Amiodarone（劑量未註明）', 'drug') },
+  { label: 'Amiodarone', phrases: ['AMIODARONE完成', 'AMIO完成', '胺碘酮完成'], action: () => logVoiceRecord('Amiodarone', 'drug') },
   { label: 'Lidocaine', phrases: ['LIDOCAINE完成', '利多卡因完成'], action: () => logVoiceRecord('Lidocaine', 'drug') },
   { label: 'Atropine 1mg', phrases: ['ATROPINE完成', '阿托品完成', '阿托品一毫克完成'], action: () => logVoiceRecord('Atropine 1mg', 'drug') },
   { label: 'Adenosine', phrases: ['ADENOSINE完成', '腺苷完成'], action: () => logVoiceRecord('Adenosine', 'drug') },
@@ -268,7 +298,7 @@ function openVoiceGuide() {
   const container = document.getElementById('voice-guide-commands');
   if (!dialog || !container) return;
   container.replaceChildren();
-  const drugLabels = new Set(['Epinephrine 1mg', 'Amio 300mg', 'Amio 150mg', 'Amiodarone（劑量未註明）', 'Lidocaine', 'Atropine 1mg', 'Adenosine']);
+  const drugLabels = new Set(['Epinephrine 1mg', 'Amiodarone', 'Lidocaine', 'Atropine 1mg', 'Adenosine']);
   const groupFor = label => {
     if (label.startsWith('心律 ')) return '心律紀錄';
     if (drugLabels.has(label)) return '給藥紀錄';
@@ -833,3 +863,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // Recover records independently of clinical timers or microphone permissions.
 ReportManager.initialize();
+try {
+  const language = localStorage.getItem('acls-speech-language');
+  if (['zh-TW', 'en-US'].includes(language)) document.getElementById('speech-language').value = language;
+} catch (_) { /* Use the default Chinese recognition language. */ }

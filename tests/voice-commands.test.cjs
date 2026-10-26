@@ -8,6 +8,7 @@ const root = path.resolve(__dirname, '..');
 function speechEnvironment() {
   const records = [];
   const context = vm.createContext({
+    document: { getElementById: () => ({ textContent: '' }) },
     logAction: (text, category) => records.push({ text, category }),
     triggerManualShock() {}, triggerAEDShock() {}, administerEpinephrine() {}, triggerROSCState() {},
     setCPRMode() {}, setMetronomeRunning() {},
@@ -15,11 +16,12 @@ function speechEnvironment() {
   });
   vm.runInContext(fs.readFileSync(path.join(root, 'voice-aliases.js'), 'utf8'), context);
   const app = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
-  const start = app.indexOf('function processSpeechTranscript(');
+  const start = app.indexOf('function findVoiceCommand(');
   const end = app.indexOf('// Build the reference', start);
   vm.runInContext(app.slice(start, end), context);
   return {
     records,
+    recognizeAlternatives(texts) { records.length = 0; context.processSpeechAlternatives(texts); return records.find(item => item.category === 'voice')?.text; },
     recognize(text) { records.length = 0; context.processSpeechTranscript(text); return records.find(item => item.category === 'voice')?.text; },
     commands: vm.runInContext('VOICE_COMMANDS', context)
   };
@@ -50,16 +52,14 @@ test('connected ENDO and LMA speech, transliterations, and spaced letters stay d
   }
 });
 
-test('medicine transliterations preserve explicit doses and do not invent missing doses', () => {
+test('Amiodarone voice is dose-free and supports English, Chinese, and phonetic names', () => {
   const e = speechEnvironment();
-  for (const phrase of ['阿米歐達隆三百完成', '阿咪啊打龍三百完成', '阿咪啊打龍300完成', 'amiodarone 300 完成', '阿米歐300完成']) {
-    assert.equal(e.recognize(phrase), '語音指令: Amio 300mg');
-    assert.equal(e.records.at(-1).text, 'Amio 300mg');
+  for (const phrase of ['阿米歐達隆三百完成', '阿咪啊打龍三百完成', '阿咪啊打龍300完成', 'amiodarone 300 完成', '阿米歐300完成', '阿咪啊打龍150完成']) {
+    assert.equal(e.recognize(phrase), undefined, phrase);
   }
-  for (const phrase of ['阿米歐達隆一百五完成', '阿咪啊打龍一百五完成', '阿咪啊打龍150完成', 'amiodarone 150 完成']) assert.equal(e.recognize(phrase), '語音指令: Amio 150mg');
-  for (const phrase of ['阿米歐達隆完成', '阿咪啊打龍完成', 'amiodaron 完成', '阿米歐完成']) {
-    assert.equal(e.recognize(phrase), '語音指令: Amiodarone（劑量未註明）');
-    assert.equal(e.records.at(-1).text, 'Amiodarone（劑量未註明）');
+  for (const phrase of ['阿米歐達隆完成', '阿咪啊打龍完成', 'amiodaron 完成', '阿米歐完成', 'Amiodarone done', 'amiodarone complete', 'amio completed', '胺碘酮完成']) {
+    assert.equal(e.recognize(phrase), '語音指令: Amiodarone');
+    assert.equal(e.records.at(-1).text, 'Amiodarone');
   }
   for (const phrase of ['EPI 完成', '艾皮奈弗林完成', '伊匹餒fin完成', '伊匹餒 FIN 完成']) {
     assert.equal(e.recognize(phrase), '語音指令: Epinephrine 1mg');
@@ -67,6 +67,17 @@ test('medicine transliterations preserve explicit doses and do not invent missin
   assert.equal(e.recognize('萊多卡因完成'), '語音指令: Lidocaine');
   assert.equal(e.recognize('阿托平完成'), '語音指令: Atropine 1mg');
   assert.equal(e.recognize('阿登諾辛完成'), '語音指令: Adenosine');
+});
+
+test('English completion phrases and alternative results execute once without conflicting guesses', () => {
+  const e = speechEnvironment();
+  assert.equal(e.recognize('ENDO done'), '語音指令: ENDO 確切呼吸道');
+  assert.equal(e.recognize('lidocaine complete'), '語音指令: Lidocaine');
+  assert.equal(e.recognizeAlternatives(['unrecognized', 'Amiodarone done', 'amio complete']), '語音指令: Amiodarone');
+  assert.equal(e.records.filter(item => item.category === 'drug').length, 1);
+  assert.equal(e.recognizeAlternatives(['unrecognized', 'Amiodarone done', 'EPI complete']), undefined);
+  assert.equal(e.records.length, 0);
+  assert.equal(e.recognizeAlternatives(['ENDO done', 'LMA done']), '語音指令: ENDO 確切呼吸道');
 });
 
 test('rhythm and ROSC pronunciation variants still require their command prefix', () => {
