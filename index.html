@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-title" content="救護助手">
   
   <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="styles.css?v=19">
+  <link rel="stylesheet" href="styles.css?v=20">
 </head>
 <body>
 
@@ -241,13 +241,15 @@
     <div class="voice-guide-content">
       <p>先按「啟動急救流程」，允許麥克風，確認右上角顯示「語音：開」。一次說一個完整指令，說完請查看紀錄區，確認已出現語音指令及對應事件。</p>
       <p class="voice-guide-highlight">LMA：「LMA 完成」或「進階呼吸道完成」。<br>ENDO：「ENDO 完成」、「確切呼吸道完成」或「氣管插管完成」。</p>
+      <p>也接受下列清單中的連讀、中文音譯及中英混讀，例如「en豆完成」、「恩豆完成」、「阿米歐達隆完成」。辨識結果因手機與瀏覽器而異；這些是可接受的辨識文字，不代表能保證聽懂所有口音，說完請核對紀錄。</p>
       <p>手動電擊使用畫面當下選定的焦耳數；給藥須說出藥名，單說「給藥完成」無法觸發。啟動流程、結束任務、選擇焦耳數、匯出及刪除紀錄須使用畫面操作。</p>
       <div id="voice-guide-commands"></div>
     </div>
   </dialog>
 
-  <script src="reports.js?v=19"></script>
-  <script src="app.js?v=19"></script>
+  <script src="reports.js?v=20"></script>
+  <script src="voice-aliases.js?v=20"></script>
+  <script src="app.js?v=20"></script>
   
   <!-- PWA Offline Service Worker Registration -->
   <script>

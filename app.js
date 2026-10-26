@@ -198,11 +198,9 @@ function updateMicUI(listening) {
 function processSpeechTranscript(transcript) {
   // Remove punctuation/spaces and normalize English letters so phrases such as
   // "I V / I O" and "ivio" resolve to the same command.
-  const cleanText = transcript
-    .replace(/[^\u3400-\u9FFFA-Za-z0-9]/g, '')
-    .toUpperCase();
+  const cleanText = normalizeVoiceText(transcript);
   const command = VOICE_COMMANDS.find(({ phrases }) =>
-    phrases.some(phrase => cleanText.includes(phrase))
+    phrases.some(phrase => cleanText.includes(normalizeVoiceText(phrase)))
   );
 
   if (!command) return;
@@ -214,16 +212,16 @@ function logVoiceRecord(text, category = 'type') {
   logAction(text, category);
 }
 
-const VOICE_COMMANDS = [
+const VOICE_COMMANDS = expandVoiceCommandPhrases([
   // 電擊：較明確的「手動電擊」必須放在一般「電擊」之前。
   { label: '手動電擊', phrases: ['手動電擊完成', '手動電擊已完成'], action: triggerManualShock },
   { label: 'AED 電擊', phrases: ['AED電擊完成', 'AED電擊已完成', '電擊完成'], action: triggerAEDShock },
 
   // 給藥：必須包含藥名，避免「給藥完成」被誤記為特定藥物。
   { label: 'Epinephrine 1mg', phrases: ['EPINEPHRINE完成', '腎上腺素完成', '腎上腺素一毫克完成', '強心針完成'], action: administerEpinephrine },
-  { label: 'Amio 300mg', phrases: ['AMIO三百完成', 'AMIO300完成', 'AMIODARONE三百完成', '胺碘酮三百完成'], action: () => logVoiceRecord('Amio 300mg', 'drug') },
-  { label: 'Amio 150mg', phrases: ['AMIO一百五完成', 'AMIO150完成', 'AMIODARONE一百五完成', '胺碘酮一百五完成'], action: () => logVoiceRecord('Amio 150mg', 'drug') },
-  { label: 'Amiodarone（劑量未註明）', phrases: ['AMIODARONE完成'], action: () => logVoiceRecord('Amiodarone（劑量未註明）', 'drug') },
+  { label: 'Amio 300mg', phrases: ['AMIO三百完成', 'AMIO300完成', 'AMIODARONE三百完成', 'AMIODARONE300完成', '胺碘酮三百完成'], action: () => logVoiceRecord('Amio 300mg', 'drug') },
+  { label: 'Amio 150mg', phrases: ['AMIO一百五完成', 'AMIO150完成', 'AMIODARONE一百五完成', 'AMIODARONE一百五十完成', 'AMIODARONE150完成', '胺碘酮一百五完成'], action: () => logVoiceRecord('Amio 150mg', 'drug') },
+  { label: 'Amiodarone（劑量未註明）', phrases: ['AMIODARONE完成', 'AMIO完成'], action: () => logVoiceRecord('Amiodarone（劑量未註明）', 'drug') },
   { label: 'Lidocaine', phrases: ['LIDOCAINE完成', '利多卡因完成'], action: () => logVoiceRecord('Lidocaine', 'drug') },
   { label: 'Atropine 1mg', phrases: ['ATROPINE完成', '阿托品完成', '阿托品一毫克完成'], action: () => logVoiceRecord('Atropine 1mg', 'drug') },
   { label: 'Adenosine', phrases: ['ADENOSINE完成', '腺苷完成'], action: () => logVoiceRecord('Adenosine', 'drug') },
@@ -262,7 +260,7 @@ const VOICE_COMMANDS = [
   { label: '心律 AFib', phrases: ['紀錄心律AFIB', '確認心房顫動', '紀錄心房顫動'], action: () => logVoiceRecord('心律評估: AFib', 'ecg') },
   { label: '心律 AFlutter', phrases: ['紀錄心律AFLUTTER', '確認心房撲動', '紀錄心房撲動'], action: () => logVoiceRecord('心律評估: AFlutter', 'ecg') },
   { label: '心律 AVB', phrases: ['紀錄心律AVB', '確認房室傳導阻滯', '紀錄房室傳導阻滯'], action: () => logVoiceRecord('心律評估: AVB', 'ecg') }
-];
+]);
 
 // Build the reference from the actual recognition phrases so it stays in sync.
 function openVoiceGuide() {

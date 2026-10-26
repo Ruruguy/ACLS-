@@ -33,6 +33,8 @@ const root = path.resolve(__dirname, '..');
     assert.equal(await page.locator('.voice-command-table tbody tr').count(), await page.evaluate(() => VOICE_COMMANDS.length));
     assert.match(await page.locator('#voice-guide-commands').innerText(), /確切呼吸道完成/);
     assert.match(await page.locator('#voice-guide-commands').innerText(), /LMA完成/);
+    assert.match(await page.locator('#voice-guide-commands').innerText(), /EN豆完成/);
+    assert.match(await page.locator('#voice-guide-commands').innerText(), /阿米歐達隆完成/);
     await page.screenshot({ path: '/tmp/acls-voice-guide-mobile.png' });
     await page.getByRole('button', { name: '關閉語音指令', exact: true }).click();
     await page.getByRole('button', { name: '啟動急救流程', exact: true }).click();
@@ -45,8 +47,8 @@ const root = path.resolve(__dirname, '..');
     // Exercise command dispatch separately from the browser's speech service.
     await page.evaluate(() => {
       processSpeechTranscript('LMA 進階呼吸道完成');
-      processSpeechTranscript('ENDO 確切呼吸道完成');
-      processSpeechTranscript('amiodarone 完成');
+      processSpeechTranscript('en豆完成');
+      processSpeechTranscript('阿米歐達隆完成');
     });
     await page.getByRole('button', { name: 'AED 電擊', exact: true }).click();
     await page.getByRole('button', { name: 'AED 電擊', exact: true }).click();
