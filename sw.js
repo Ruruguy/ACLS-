@@ -1,9 +1,10 @@
-const CACHE_NAME = 'cpr-assistant-v10';
+const CACHE_NAME = 'cpr-assistant-v16';
 const ASSETS = [
   './',
   './index.html',
-  './styles.css?v=10',
-  './app.js?v=10',
+  './styles.css?v=16',
+  './reports.js?v=16',
+  './app.js?v=16',
   './manifest.json',
   './d0c65ba4-4bd4-41bd-ab4d-e1063726e894.png'
 ];
@@ -34,19 +35,26 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// Fetch assets from cache, falling back to network
+// Use network-first navigation so installed PWAs receive new versions promptly.
+// Versioned static assets remain cache-first for reliable offline operation.
 self.addEventListener('fetch', (e) => {
+  if (e.request.mode === 'navigate') {
+    e.respondWith(
+      fetch(e.request).then((response) => {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put('./index.html', copy));
+        return response;
+      }).catch(() => caches.match('./index.html'))
+    );
+    return;
+  }
+
   e.respondWith(
     caches.match(e.request).then((cachedResponse) => {
       if (cachedResponse) {
         return cachedResponse;
       }
-      return fetch(e.request).catch(() => {
-        // Fallback for document navigation if offline and not cached
-        if (e.request.mode === 'navigate') {
-          return caches.match('./index.html');
-        }
-      });
+      return fetch(e.request);
     })
   );
 });

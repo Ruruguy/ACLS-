@@ -17,6 +17,9 @@ let isListening = false;
 let speechRequested = false;
 let speechRestartTimer = null;
 let missionActive = false;
+let missionId = null;
+let missionLogs = [];
+let missionEndTime = null;
 
 // Circle Stroke Circumference
 const ringCircle = document.getElementById('timer-progress-ring');
@@ -55,7 +58,11 @@ function startApp() {
 
   // Record start time
   startTime = new Date();
+  missionEndTime = null;
+  missionId = ReportManager.makeId('case');
+  missionLogs = [];
   missionActive = true;
+  ReportManager.requestPersistentStorage();
 
   // Request WakeLock to keep screen on
   requestScreenWakeLock();
@@ -611,6 +618,24 @@ function logAction(text, category = '') {
   entry.className = `log-entry ${finalCategory}`;
 
   const now = new Date();
+  const eventRecord = {
+    id: ReportManager.makeId('event'),
+    timestamp: now.toISOString(),
+    text,
+    category: finalCategory
+  };
+  missionLogs.push(eventRecord);
+  if (missionId && startTime) {
+    ReportManager.saveSnapshot({
+      id: missionId,
+      startedAt: startTime.toISOString(),
+      endedAt: (missionEndTime || now).toISOString(),
+      updatedAt: now.toISOString(),
+      status: missionActive ? 'in_progress' : 'completed',
+      timeline: missionLogs.map(item => ({ ...item }))
+    }).catch(error => console.error('自動存檔失敗', error));
+  }
+  entry.dataset.eventId = eventRecord.id;
   const h = now.getHours().toString().padStart(2, '0');
   const m = now.getMinutes().toString().padStart(2, '0');
   const s = now.getSeconds().toString().padStart(2, '0');
@@ -627,16 +652,13 @@ function logAction(text, category = '') {
 }
 
 function exportLogsToTxt() {
-  let doc = `紀錄時間: ${new Date().toLocaleString()}\n`;
+  let doc = `紀錄時間: ${new Date().toLocaleString('zh-TW')}\n`;
   doc += "===================================\n\n";
 
-  const entries = document.querySelectorAll('.log-entry:not([data-placeholder="true"])');
-  
-  // Read array backwards to align logs in chronologically ascending order
-  const array = Array.from(entries).reverse();
-  array.forEach(entry => {
-    const time = entry.querySelector('.log-time').innerText;
-    let msg = entry.querySelector('.log-msg').innerText;
+  const events = missionLogs.slice().sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  events.forEach(event => {
+    const time = new Date(event.timestamp).toLocaleTimeString('zh-TW', { hour12: false });
+    let msg = event.text;
     if (msg.includes('急救流程啟動') || msg.includes('Code Blue Started')) {
       msg = '急救開始';
     }
@@ -653,11 +675,22 @@ function exportLogsToTxt() {
   a.href = URL.createObjectURL(blob);
   a.download = `救護助手急救紀錄_${new Date().getTime()}.txt`;
   a.click();
+  ReportManager.showFileLocation(a.download);
   setTimeout(() => URL.revokeObjectURL(a.href), 0);
+}
+
+function applySavedReportToCurrentMission(report) {
+  if (!report || report.id !== missionId) return;
+  missionLogs = report.timeline.map(item => ({ ...item }));
+}
+
+function isCurrentMissionActive(id) {
+  return missionActive && missionId === id;
 }
 
 function endResuscitationMission() {
   if (!missionActive) return;
+  missionEndTime = new Date();
   missionActive = false;
   // Clear all running intervals
   if (globalTimerInterval) clearInterval(globalTimerInterval);
@@ -702,13 +735,24 @@ function endResuscitationMission() {
   epiProgress.style.width = '0%';
 
   // Keep the record export available, but lock all clinical controls after mission end.
-  document.querySelectorAll('button:not(#btn-export-logs), select').forEach(control => {
+  document.querySelectorAll('#cpr-main-panel button:not(#btn-export-logs), #cpr-main-panel select, #btn-mic-toggle').forEach(control => {
     control.disabled = true;
   });
   epiBtn.style.pointerEvents = 'none';
   epiBtn.setAttribute('aria-disabled', 'true');
 
   logAction('任務結束 (Mission Ended)', 'end');
+
+  const report = {
+    id: missionId || ReportManager.makeId('case'),
+    startedAt: startTime ? startTime.toISOString() : missionEndTime.toISOString(),
+    endedAt: missionEndTime.toISOString(),
+    updatedAt: missionEndTime.toISOString(),
+    status: 'completed',
+    note: '',
+    timeline: missionLogs.map(item => ({ ...item }))
+  };
+  ReportManager.saveAndOpen(report);
 }
 
 // === 8. Screen WakeLock API ===
@@ -738,3 +782,6 @@ document.addEventListener('visibilitychange', async () => {
     requestScreenWakeLock();
   }
 });
+
+// Recover records independently of clinical timers or microphone permissions.
+ReportManager.initialize();

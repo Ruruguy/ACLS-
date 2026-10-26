@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-title" content="救護助手">
   
   <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="styles.css?v=10">
+  <link rel="stylesheet" href="styles.css?v=16">
 </head>
 <body>
 
@@ -28,6 +28,9 @@
     <h2 class="splash-title">救護助手</h2>
     <p class="splash-subtitle">emergency</p>
     <button id="btn-start-flow" class="start-btn" onclick="startApp()">啟動急救流程</button>
+    <button class="history-entry-btn" onclick="ReportManager.openHistory()">歷史個案與統計</button>
+    <button id="recovery-notice" class="history-entry-btn" hidden onclick="ReportManager.openHistory()"></button>
+    <p class="local-storage-hint">紀錄只保存在自己的裝置，不會上傳</p>
     <div class="splash-footer">
       <p>僅作急救輔助使用，不可用於販售之用途</p>
     </div>
@@ -48,6 +51,7 @@
         </div>
       </div>
       <div style="display: flex; align-items: center; gap: 8px;">
+        <button class="btn-header-history" onclick="ReportManager.openHistory()" title="查看歷史個案與統計">歷史／統計</button>
         <button id="btn-mic-toggle" class="btn-mic-toggle" onclick="toggleSpeechRecognition()" title="啟動語音辨識">
           <svg class="mic-icon" viewBox="0 0 24 24" fill="currentColor" style="width: 14px; height: 14px; display: block;">
             <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
@@ -167,6 +171,7 @@
       <section class="panel logging-panel" id="cpr-logging-card">
         <div class="panel-header">
           <span class="panel-title">計時 / 紀錄</span>
+          <span id="save-status" role="status" aria-live="polite">本機自動存檔</span>
         </div>
 
         <!-- Global Clock -->
@@ -191,14 +196,52 @@
     </main>
   </div>
 
-  <script src="app.js?v=10"></script>
+  <!-- End-of-mission report, local case history, and statistics -->
+  <div id="report-modal" class="report-modal" hidden aria-hidden="true">
+    <div class="report-dialog" role="dialog" aria-modal="true" aria-labelledby="report-modal-title">
+      <div class="report-dialog-header">
+        <div>
+          <span class="report-eyebrow">本機個案資料庫</span>
+          <h2 id="report-modal-title">結束報告</h2>
+        </div>
+        <button class="report-close-btn" onclick="ReportManager.close()" aria-label="關閉">×</button>
+      </div>
+      <div class="report-tabs" role="tablist">
+        <button id="report-tab-case" class="report-tab active" onclick="ReportManager.showTab('case')">個案報告</button>
+        <button id="report-tab-history" class="report-tab" onclick="ReportManager.showTab('history')">歷史個案</button>
+        <button id="report-tab-stats" class="report-tab" onclick="ReportManager.showTab('stats')">資訊統計</button>
+      </div>
+      <div id="report-content" class="report-content"></div>
+    </div>
+  </div>
+
+  <div id="app-toast" class="app-toast" role="status" aria-live="polite"></div>
+
+  <dialog id="file-location-dialog" class="file-location-dialog" aria-labelledby="file-location-title">
+    <h2 id="file-location-title">請確認檔案儲存位置</h2>
+    <p>已發起下載，請確認瀏覽器是否完成下載或仍等待你選擇儲存位置。</p>
+    <p>本次檔名：<strong id="download-filename"></strong></p>
+    <ul>
+      <li>iPhone／iPad：可查看瀏覽器下載清單，或「檔案」App 中的下載項目；也可能儲存在你選擇的 iCloud 雲碟或「我的 iPhone」位置。</li>
+      <li>Android：可查看瀏覽器的「下載」清單，或檔案管理 App 的「下載／Downloads」。</li>
+      <li>若有出現「儲存到檔案」或位置選擇畫面，請記住你實際選擇的資料夾。</li>
+    </ul>
+    <p>每台手機設定不同，網站無法讀取實際下載路徑。請用上方檔名搜尋，並開啟檔案確認已保存。</p>
+    <form method="dialog"><button class="report-btn primary">我知道了</button></form>
+  </dialog>
+
+  <script src="reports.js?v=16"></script>
+  <script src="app.js?v=16"></script>
   
   <!-- PWA Offline Service Worker Registration -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js')
-          .then((reg) => console.log('Service Worker Registered Successfully.', reg.scope))
+          .then((reg) => {
+            console.log('Service Worker Registered Successfully.', reg.scope);
+            reg.update();
+          })
           .catch((err) => console.log('Service Worker Registration Failed:', err));
       });
     }
